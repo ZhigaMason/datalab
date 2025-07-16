@@ -11,7 +11,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ## Loading data
 
-we load 
+The dataset is loaded using a function from `R/load_data.R` script, we will also load required libraries.
 
 ```{r}
 library(corrplot)
@@ -31,12 +31,6 @@ print(sprintf("Positive rate:              %.3f", nrow(pos_labeled) / nrow(data)
 ```
 
 It is clear that data is strongly skewed towards negative outcome (the contacted person has not subscribed to the deposit) with only 11.5% of samples being positive.
-
-## Quick Summary
-
-```{r}
-summary(data)
-```
 
 ## Binary Data Analysis
 
@@ -65,7 +59,7 @@ mosaicplot(
 )
 ```
 
-Mosaic plots show that standalone **default** feature gives no insight into data, due to its values being extremly skewed towards negative answer and both groups have similar proportions of people subscribed to deposit.
+Mosaic plots show that standalone **default** feature gives no insight into data, due to its values being extrmely skewed towards negative answer and both groups have similar proportions of people subscribed to deposit.
 
 Feature **loan**, representing whether the client has a personal loan, is also dominated by negative answers, though not as severe as **default**, and a population without the personal loan is more likely to subscribe to deposit.
 
@@ -258,7 +252,7 @@ Cellular calls were the most frequent form of communication. Unlabeled records a
 
 ## Numerical Data
 
-We will plot box-plots of numerical features against target variable.
+We will plot box-plots of numerical features against target variable overall dataset histogram.
 
 ```{r}
 boxplot_mean <- function(col_name, fctr='y') {
@@ -278,53 +272,98 @@ boxplot_mean <- function(col_name, fctr='y') {
 ```{r}
 boxplot_mean("age")
 title("Label X Age")
+
+hist(
+    data$age,
+    xlab = "age",
+    main = "Histogram of Age"
+)
 ```
 
-Boxes-and-whispers of both classes are very similar with median 39 and 40 and almost identical means. Population that has not subscribed has slightly lower range.
+Boxes-and-whispers of both classes are very similar with median 39 and 40 and almost identical means. Population that has not subscribed has slightly lower range. The dataset histograms gravitates towards 30 years, we also see a suffen drop at 60 years, this can be a bias introduced during data engineering process.
 
 ### Balance
 
 ```{r}
 boxplot_mean("balance")
 title("Label X Balance")
+hist(
+    data$balance,
+    main = "Histogram of Balance",
+    breaks = 100,
+    xlab = "balance",
+    xlim = c(min(data$balance) * 2, 25000)
+)
 ```
 
 Both ranges are squashed, due to extreme values at the positive tail of distributions. During our modelling step we shall pay great attention to outliers, as they may overinfluence our model.
+
+We have clipped the histograms to display greater mass of values, due to the outlier that is easily to spot at the top of boxplot. We see that almost all records are contained within (-1000, 5000) interval and distribution has a spiky bell curve.
 
 ### Duration of Last Call
 
 ```{r}
 boxplot_mean("duration")
 title("Label X Last Call Duration (seconds)")
+hist(
+    data$duration,
+    xlab = "duration (seconds)",
+    main = "Histogram of Last Call Duration"
+)
 ```
 
 Here we see some real difference: positive population distribution is a lot wider with median 500 seconds = 8.3 minutes, while the other classes range just barely stretches over 500. We also see many outliers in both classes. Such sharp contrast may be instrumental to *yes* population, due to the deposit arranging taking longer time, than simply declining one.
+
+The histogram follows shape of Poisson or Exponential distribution with a tail quickly vanishing after 1000 seconds.
 
 ### Number of Contacts during Campaign (campaign)
 
 ```{r}
 boxplot_mean("campaign")
 title("Label X Number of Contacts during Campaign")
+
+hist(
+    data$campaign,
+    xlab = "Histogram of Number of Contacts during Campaign",
+    breaks = 50,
+    main = "# of contacts"
+)
 ```
 This plot has a lot in common with **balance**. It also shows great number of outliers and range squeezed into bottomline. //add histograms
+
+Histograms also shows fast rate of decay after 3 contacts per person, we may hypothesize that  **campaign** is distributed exponentially.
 
 ### Number of Days since Last Contact (pdays)
 
 ```{r}
 boxplot_mean("pdays")
 title("Label X Number of Days since Last Contact")
+
+hist(
+    data$pdays,
+    main = "Histogram of Number of Days since Last Contact",
+    xlab = "pdays"
+)
 ```
 
-This box-and-whispers graph follows path of **duration** with *yes* being stretched out into a year timespan, while *no* is smashed into zero. An important remark is that value of 0 indicates, that the call made is the first one. From positivity rates we know that most people would not subscribed. /*explain previous sentance*/  It is expected, that calling the same of next days does not change a situation, so *no* population is destined to have less delay between contacts.
+This box-and-whispers graph follows path of **duration** with *yes* being stretched out into a year timespan, while *no* is smashed into zero. An important remark is that value of -1 indicates, that the call made is the first one. We hope that next plots will be able to make it clear, why value -1 is present in most samples.
 
 ### Number of Contacts before Campaign (previous)
 
 ```{r}
 boxplot_mean("previous")
 title("Label X Number of Contacts before Campaign")
+
+hist(
+    data$previous,
+    main = "Histogram of Number of Contacts before Campaign",
+    xlab = "previous"
+)
 ```
 
 This pattern is very similar to the one for **balance** and **pdays**. Here it seems old clients are more eager to subscribe to deposit, than new clients, bases on the chart above.
+
+We can also see that most people, who were contacted during the campaign, had no previous ties with the bank, thus **pdays** number of days since last contact is mostly -1.
 
 ## Feature interactions
 
@@ -394,12 +433,16 @@ for (col in colnames(numeric_data)) {
 }
 ```
 
+The only point of interest in plots above are higher-than-others values for **previous** in *student* job group. This maybe another data engineering bias, because it is common to use students for data collection campaigns and they might have also been a part of other research or have ties to the bank.
+
 ```{r}
 for (col in colnames(numeric_data)) {
     boxplot_mean(col, "marital")
     title(sprintf("Marital Status x %s", col))
 }
 ```
+
+Plots follow natural flow of dataset, with no visible association between categories and numerical variables, except for *single* population being a lot younger than *divorced* and *married*.
 
 ```{r}
 for (col in colnames(numeric_data)) {
@@ -408,9 +451,17 @@ for (col in colnames(numeric_data)) {
 }
 ```
 
+No relations are seen between **education** and numerical values, slight deviations are present in **age** feature, those can be a result of ongoing trend of younger generations being educated more on average.
+
 ```{r}
 for (col in colnames(numeric_data)) {
     boxplot_mean(col, "contact")
     title(sprintf("Contact x %s", col))
 }
 ```
+
+No significant dependancies can be recognized here as well.
+
+## Conclusion
+
+After thorough EDA we have collected a battery of knowledge to test against the data. Those include distribution types (normality of age, exponential for duration and number of calls), independence of categorical and numerical features (low correlation scores, similar box-plots over a feature) and their efficacy as predictors for whether a person gets subscribed or not (prevalence of single value through dataset in **pdays**, **previous**). Specialized treatment should be given to outliers, that arise in every feature and impact it.

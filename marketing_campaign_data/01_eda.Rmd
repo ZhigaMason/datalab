@@ -2,7 +2,11 @@
 title: "01_eda"
 author: "Maksym Khavil"
 date: "2025-07-15"
-output: html_document
+output: 
+    html_document:
+        toc: true
+        theme: yeti
+        number_sections: true
 ---
 
 ```{r setup, include=FALSE}
@@ -16,7 +20,9 @@ The dataset is loaded using a function from `R/load_data.R` script, we will also
 ```{r}
 library(corrplot)
 
+source(here::here("R", "constants.R"))
 source(here::here("R", "load_data.R"))
+
 data = load_bank_data()
 data
 ```
@@ -34,7 +40,7 @@ It is clear that data is strongly skewed towards negative outcome (the contacted
 
 ## Binary Data Analysis
 
-We will plot contingency tables between binary features and target variable to investigate their relations.
+We will plot contingency tables between binary features and target variable to investigate their relations. We want to check if those variables interact with target variable in any way.
 
 ```{r}
 par(mfrow=c(1, 3))
@@ -59,7 +65,7 @@ mosaicplot(
 )
 ```
 
-Mosaic plots show that standalone **default** feature gives no insight into data, due to its values being extrmely skewed towards negative answer and both groups have similar proportions of people subscribed to deposit.
+Mosaic plots show that standalone **default** feature does not differentiate between target classes, due to its values being extrmely skewed towards negative answer and both groups have similar proportions of people subscribed to deposit.
 
 Feature **loan**, representing whether the client has a personal loan, is also dominated by negative answers, though not as severe as **default**, and a population without the personal loan is more likely to subscribe to deposit.
 
@@ -68,95 +74,71 @@ The biggest distinction between target classes is given by **housing**, a featur
 
 ## Multiclass Data analysis
 
-For each multiclass feature we will plot absolute counts and rates of both classes to examine feature structure and interactions with target variable.
+For each multiclass feature we will plot absolute counts and rates of both classes to examine feature structure and interactions with target variable. By those means we want to understand whether different classes are more favorable to subscribe to the deposit, as well as study class distributions.
+
+```{r}
+plot_count_bars <- function(col, ...) {
+    pos <- aggregate(x = list(count = pos_labeled$y), by = list(column = pos_labeled[,col]), FUN = length)
+    neg <- aggregate(x = list(count = neg_labeled$y), by = list(column = neg_labeled[,col]), FUN = length)
+    data_matrix <- matrix(
+        c( pos$count,  neg$count), nrow = 2, byrow = TRUE
+    )
+    colnames(data_matrix) <- pos$column
+    rownames(data_matrix) <- c("Pos. Cnt", "Neg. Cnt")
+    barplot(
+        data_matrix,
+        beside = TRUE,
+        legend = rownames(data_matrix),
+        main = sprintf("Class Counts X %s", col),
+        xlab = col, ylab = "Class Counts",
+        ...
+    )
+    grid()
+}
+
+plot_rate_bars <- function(col, ...) {
+    par(mar=c(5, 4, 6, 2))
+    total_cnt <- aggregate(x = list(count = data$y), by = list(column = data[,col]), FUN = length)$count
+    pos <- aggregate(x = list(count = pos_labeled$y), by = list(column = pos_labeled[,col]), FUN = length)
+    neg <- aggregate(x = list(count = neg_labeled$y), by = list(column = neg_labeled[,col]), FUN = length)
+    data_matrix <- matrix(
+        c( pos$count / total_cnt,  neg$count / total_cnt), nrow = 2, byrow = TRUE
+    )
+    colnames(data_matrix) <- pos$column
+    rownames(data_matrix) <- c("Pos. Rate", "Neg. Rate")
+    barplot(
+        data_matrix,
+        main = sprintf("Class Rates X %s", col),
+        ylim=c(0,1),
+        xlab = col, ylab = "Class Rates",
+        ...
+    )
+    grid()
+    legend(
+        "topright",
+        legend = rownames(data_matrix),
+        xpd = T,
+        fill=c("black", "grey"),
+        inset=c(0, -0.2)
+    )
+}
+```
 
 ### Job
 
 ```{r}
-pos <- aggregate(x = list(count = pos_labeled$y), by = list(column = pos_labeled$job), FUN = length)
-neg <- aggregate(x = list(count = neg_labeled$y), by = list(column = neg_labeled$job), FUN = length)
-data_matrix <- matrix(
-    c( pos$count,  neg$count), nrow = 2, byrow = TRUE
-)
-colnames(data_matrix) <- pos$column
-rownames(data_matrix) <- c("Pos. Cnt", "Neg. Cnt")
-barplot(
-    data_matrix,
-    beside = TRUE,
-    legend = rownames(data_matrix),
-    main = sprintf("Class Counts X %s", "Job"),
-    cex.names = 0.45,
-    xlab = "Job", ylab = "Class Counts"
-)
-grid()
+plot_count_bars("job", cex.names = 0.7, las=2)
 
-par(mar=c(5, 4, 6, 2))
-total_cnt <- aggregate(x = list(count = data$y), by = list(column = data[,"job"]), FUN = length)$count
-data_matrix <- matrix(
-    c( pos$count / total_cnt,  neg$count / total_cnt), nrow = 2, byrow = TRUE
-)
-colnames(data_matrix) <- pos$column
-rownames(data_matrix) <- c("Pos. Rate", "Neg. Rate")
-barplot(
-    data_matrix,
-    beside = TRUE,
-    main = sprintf("Class Rates X %s", "Job"),
-    cex.names = 0.45,
-    ylim=c(0,1),
-    xlab = "Job", ylab = "Class Rates"
-)
-grid()
-legend(
-    "topright",
-    legend = rownames(data_matrix),
-    xpd = T,
-    fill=c("black", "grey"),
-    inset=c(0, -0.2)
-)
+plot_rate_bars("job", cex.names = 0.7, las=2)
 ```
 Most of population is employed in management or as a technician and blue-collar workers. Other large categories include administration and service. Every job group shows results, that are similar to the whole data-set, i.e. positive rate close to 10%, except for *retired*, *students* and *unknown*. That is an interesting phenomenon that can be checked later during statistical testing.
 
 ### Marital Status
 
 ```{r}
-pos <- aggregate(x = list(count = pos_labeled$y), by = list(column = pos_labeled$marital), FUN = length)
-neg <- aggregate(x = list(count = neg_labeled$y), by = list(column = neg_labeled$marital), FUN = length)
-data_matrix <- matrix(
-    c( pos$count,  neg$count), nrow = 2, byrow = TRUE
-)
-colnames(data_matrix) <- pos$column 
-rownames(data_matrix) <- c("Pos. Cnt", "Neg. Cnt")
-barplot(
-    data_matrix,
-    beside = TRUE,
-    legend = rownames(data_matrix),
-    main = sprintf("Class Counts X %s", "marital"),
-    xlab = "Marital", ylab = "Class Counts"
-)
-grid()
+plot_count_bars("marital")
 
-par(mar=c(5, 4, 6, 2))
-total_cnt <- aggregate(x = list(count = data$y), by = list(column = data[,"marital"]), FUN = length)$count
-data_matrix <- matrix(
-    c( pos$count / total_cnt,  neg$count / total_cnt), nrow = 2, byrow = TRUE
-)
-colnames(data_matrix) <- pos$column
-rownames(data_matrix) <- c("Pos. Rate", "Neg. Rate")
-barplot(
-    data_matrix,
-    beside = TRUE,
-    main = sprintf("Class Rates X %s", "marital"),
-    ylim=c(0,1),
-    xlab = "Marital", ylab = "Class Rates"
-)
-grid()
-legend(
-    "topright",
-    legend = rownames(data_matrix),
-    xpd = T,
-    fill=c("black", "grey"),
-    inset=c(0, -0.2)
-)
+plot_rate_bars("marital")
 ```
 
 Most of the contacted people were married, but they were the least likely to subscribe to the deposit, though the difference may be insignificant.
@@ -164,44 +146,9 @@ Most of the contacted people were married, but they were the least likely to sub
 ### Education
 
 ```{r}
-pos <- aggregate(x = list(count = pos_labeled$y), by = list(column = pos_labeled$education), FUN = length)
-neg <- aggregate(x = list(count = neg_labeled$y), by = list(column = neg_labeled$education), FUN = length)
-data_matrix <- matrix(
-    c( pos$count,  neg$count), nrow = 2, byrow = TRUE
-)
-colnames(data_matrix) <- pos$column
-rownames(data_matrix) <- c("Pos. Cnt", "Neg. Cnt")
-barplot(
-    data_matrix,
-    beside = TRUE,
-    legend = rownames(data_matrix),
-    main = sprintf("Class Counts X %s", "Education"),
-    xlab = "Education", ylab = "Class Counts"
-)
-grid()
+plot_count_bars("education")
 
-par(mar=c(5, 4, 6, 2))
-total_cnt <- aggregate(x = list(count = data$y), by = list(column = data[,"education"]), FUN = length)$count
-data_matrix <- matrix(
-    c( pos$count / total_cnt,  neg$count / total_cnt), nrow = 2, byrow = TRUE
-)
-colnames(data_matrix) <- pos$column
-rownames(data_matrix) <- c("Pos. Rate", "Neg. Rate")
-barplot(
-    data_matrix,
-    beside = TRUE,
-    main = sprintf("Class Rates X %s", "Education"),
-    ylim=c(0,1),
-    xlab = "Education", ylab = "Class Rates"
-)
-grid()
-legend(
-    "topright",
-    legend = rownames(data_matrix),
-    xpd = T,
-    fill=c("black", "grey"),
-    inset=c(0, -0.2)
-)
+plot_rate_bars("education")
 ```
 
 People with secondary education are the biggest fraction of those who took part in the data collection process, it is no surprise, as secondary education is obligatory. Despite the difference in past all three groups agree on data-set wide positive rate of around 10%. Maybe combinations with other categorical and numerical features will be able to help us reveal patterns behind people subscribing, but education alone does not provide with any insights.
@@ -209,50 +156,24 @@ People with secondary education are the biggest fraction of those who took part 
 ### Contact
 
 ```{r}
-pos <- aggregate(x = list(count = pos_labeled$y), by = list(column = pos_labeled$contact), FUN = length)
-neg <- aggregate(x = list(count = neg_labeled$y), by = list(column = neg_labeled$contact), FUN = length)
-data_matrix <- matrix(
-    c( pos$count,  neg$count), nrow = 2, byrow = TRUE
-)
-colnames(data_matrix) <- pos$column
-rownames(data_matrix) <- c("Pos. Cnt", "Neg. Cnt")
-barplot(
-    data_matrix,
-    beside = TRUE,
-    legend = rownames(data_matrix),
-    main = sprintf("Class Counts X %s", "contact"),
-    xlab = "Contact", ylab = "Class Counts"
-)
-grid()
-
-par(mar=c(5, 4, 6, 2))
-total_cnt <- aggregate(x = list(count = data$y), by = list(column = data[,"contact"]), FUN = length)$count
-data_matrix <- matrix(
-    c( pos$count / total_cnt,  neg$count / total_cnt), nrow = 2, byrow = TRUE
-)
-colnames(data_matrix) <- pos$column
-rownames(data_matrix) <- c("Pos. Rate", "Neg. Rate")
-barplot(
-    data_matrix,
-    beside = TRUE,
-    main = sprintf("Class Rates X %s", "contact"),
-    ylim=c(0,1),
-    xlab = "Contact", ylab = "Class Rates"
-)
-grid()
-legend(
-    "topright",
-    legend = rownames(data_matrix),
-    xpd = T,
-    fill=c("black", "grey"),
-    inset=c(0, -0.2)
-)
+plot_count_bars("contact")
+plot_rate_bars("contact")
 ```
+
 Cellular calls were the most frequent form of communication. Unlabeled records also present a large part of population, while the telephone category is the least prominent. With such distribution of values, we should ask our selves, whether there are any benefits in keeping  **contact** feature with almost a third of its records being unknowns, and the rest primarily binned into single category. More over cellular and telephone positive rates are very close and the distinction may in insufficient to provide any knowledge.
+
+### Outcome of previous campaign
+
+```{r}
+plot_count_bars("poutcome")
+plot_rate_bars("poutcome")
+```
+
+Most of previous outcomes are *unknown*, that is most of people had not been contacted before the campaign. Rates shows, that people who has subscribed during the last campaign, are the most likely to subscribe to the current campaign, while those who was not affected by previous campaign show opposite dynamic.
 
 ## Numerical Data
 
-We will plot box-plots of numerical features against target variable overall dataset histogram.
+We will plot box-plots of numerical features against target variable overall dataset histogram to study univariate distributions and interactions with target variable.
 
 ```{r}
 boxplot_mean <- function(col_name, fctr='y') {
@@ -265,6 +186,27 @@ boxplot_mean <- function(col_name, fctr='y') {
     )
     legend("topright", legend="▲ Means")
 }
+
+histogram_desc <- function(col_name, ...) {
+    col_data = data[,col_name]
+    hist(
+        col_data,
+        xlab = col_name,
+        ...
+    )
+    abline(v=mean(col_data), col = "red", lwd=3)
+    abline(v=median(col_data), col = "orange", lwd=3)
+    qs = quantile(col_data, probs=c(0.25, 0.75))
+    segments(
+        x0=qs["25%"], y0=0, x1=qs["75%"], y1=0, col = "yellow", lwd=3
+    )
+    legend(
+        "topright",
+        legend = c("Mean", "Median", "IQR"),
+        col = c("red", "orange", "yellow"),
+        pch = c(15, 15, 17)
+    )
+}
 ```
 
 ### Age
@@ -273,27 +215,17 @@ boxplot_mean <- function(col_name, fctr='y') {
 boxplot_mean("age")
 title("Label X Age")
 
-hist(
-    data$age,
-    xlab = "age",
-    main = "Histogram of Age"
-)
+histogram_desc("age", main = "Histogram of Age")
 ```
 
-Boxes-and-whispers of both classes are very similar with median 39 and 40 and almost identical means. Population that has not subscribed has slightly lower range. The dataset histograms gravitates towards 30 years, we also see a suffen drop at 60 years, this can be a bias introduced during data engineering process.
+Boxes-and-whispers of both classes are very similar with median 39 and 40 and almost identical means. Population that has not subscribed has slightly lower range. The dataset histograms gravitates towards 30 years, we also see a suffen drop at 60 years, this could be a bias introduced during data engineering process, we should check for that during hypothesis testing.
 
 ### Balance
 
 ```{r}
 boxplot_mean("balance")
 title("Label X Balance")
-hist(
-    data$balance,
-    main = "Histogram of Balance",
-    breaks = 100,
-    xlab = "balance",
-    xlim = c(min(data$balance) * 2, 25000)
-)
+histogram_desc("balance", main = "Histogram of Balance", xlim=c(-2000, 20000), breaks = 100)
 ```
 
 Both ranges are squashed, due to extreme values at the positive tail of distributions. During our modelling step we shall pay great attention to outliers, as they may overinfluence our model.
@@ -305,9 +237,8 @@ We have clipped the histograms to display greater mass of values, due to the out
 ```{r}
 boxplot_mean("duration")
 title("Label X Last Call Duration (seconds)")
-hist(
-    data$duration,
-    xlab = "duration (seconds)",
+histogram_desc(
+    "duration",
     main = "Histogram of Last Call Duration"
 )
 ```
@@ -322,11 +253,10 @@ The histogram follows shape of Poisson or Exponential distribution with a tail q
 boxplot_mean("campaign")
 title("Label X Number of Contacts during Campaign")
 
-hist(
-    data$campaign,
-    xlab = "Histogram of Number of Contacts during Campaign",
-    breaks = 50,
-    main = "# of contacts"
+histogram_desc(
+    "campaign",
+    main = "Histogram of Number of Contacts during Campaign",
+    breaks = 50
 )
 ```
 This plot has a lot in common with **balance**. It also shows great number of outliers and range squeezed into bottomline. //add histograms
@@ -339,10 +269,9 @@ Histograms also shows fast rate of decay after 3 contacts per person, we may hyp
 boxplot_mean("pdays")
 title("Label X Number of Days since Last Contact")
 
-hist(
-    data$pdays,
+histogram_desc(
+    "pdays",
     main = "Histogram of Number of Days since Last Contact",
-    xlab = "pdays"
 )
 ```
 
@@ -354,10 +283,10 @@ This box-and-whispers graph follows path of **duration** with *yes* being stretc
 boxplot_mean("previous")
 title("Label X Number of Contacts before Campaign")
 
-hist(
-    data$previous,
+histogram_desc(
+    "previous",
     main = "Histogram of Number of Contacts before Campaign",
-    xlab = "previous"
+    breaks = 30
 )
 ```
 
@@ -367,9 +296,12 @@ We can also see that most people, who were contacted during the campaign, had no
 
 ## Feature interactions
 
-We look at interactions between features. We will examine Pearson's and Spearman's correlation between every pair of numerical features. We will plot boxplots between numerical and categorical features.
+We will check bivariate statistics such as correlation coefficient and plot box-plots. We hope to catch connections that are present in data, that omit direct target variable impact.
 
 ### Numerical to Numerical
+
+We look at interactions between features. We will examine Pearson's and Spearman's correlation between every pair of numerical features.
+
 ```{r}
 numeric_data <- data[sapply(data, is.numeric)]
 
@@ -390,7 +322,7 @@ Most features are uncorrelated, except **pdays** and **previous** that have Pear
 
 ### Categorical to Numerical
 
-Due to a big number of vizualizations we will focus on peculiarities in data.
+We will plot boxplots between numerical and categorical features. Due to a big number of vizualizations we will focus on peculiarities in data, with lesser comments on patterns.
 
 ```{r}
 for (col in colnames(numeric_data)) {
@@ -433,7 +365,7 @@ for (col in colnames(numeric_data)) {
 }
 ```
 
-The only point of interest in plots above are higher-than-others values for **previous** in *student* job group. This maybe another data engineering bias, because it is common to use students for data collection campaigns and they might have also been a part of other research or have ties to the bank.
+The only point of interest in plots above are higher-than-others values for **previous** in *student* job group. This maybe another data engineering bias, because it is common to use students for data collection campaigns and they might have also been a part of other research or have ties to the bank, nevertheless it is just a hypothesis, that can be checked later.
 
 ```{r}
 for (col in colnames(numeric_data)) {
@@ -442,7 +374,7 @@ for (col in colnames(numeric_data)) {
 }
 ```
 
-Plots follow natural flow of dataset, with no visible association between categories and numerical variables, except for *single* population being a lot younger than *divorced* and *married*.
+No visible difference between **marital** classes, except for *single* population being a lot younger than *divorced* and *married*.
 
 ```{r}
 for (col in colnames(numeric_data)) {
@@ -462,6 +394,40 @@ for (col in colnames(numeric_data)) {
 
 No significant dependancies can be recognized here as well.
 
+## Treatment of 'unknown' values
+
+Throughout this notebook we have seen that some categorical features have *unknown* records. Let us take a look at what fraction of population is affected by them.
+
+```{r}
+par(mar=c(5, 4, 4, 3))
+
+categorical_data <- data[sapply(data, is.factor)]
+unknown_data <- t(matrix(sapply(categorical_data, function(x) sum(x == "unknown"))))
+colnames(unknown_data) <- colnames(categorical_data)
+rownames(unknown_data) <- c("# of `unknown`")
+barplot(
+    unknown_data,
+    las=2,
+    cex.names = 0.8,
+    ylab = "# of 'unknown'", main = "Absolute and Relative Number of Unknown Values",
+    ylim = c(0, nrow(data))
+)
+
+par(new = T, mar=c(5, 4, 4, 3))
+unknown_data_percent <- 100 * unknown_data / nrow(data)
+barplot(
+    unknown_data_percent,
+    las=2,
+    cex.names = 0.8,
+    ylim = c(0, 100), axes=F
+)
+axis(side=4)
+mtext("% of 'unknown'", side = 4, line =2)
+grid()
+```
+
+Most features have no records or neglectible amounts of *unknown*. **education** and **job** have under 10% of their values, while **contact** has ~30% of its values as *unknowns*. The **poutcome** has over 80% of its values as unknowns. During modeling phase we should consider whether we want to use **contact** and **poutcome**.
+
 ## Conclusion
 
-After thorough EDA we have collected a battery of knowledge to test against the data. Those include distribution types (normality of age, exponential for duration and number of calls), independence of categorical and numerical features (low correlation scores, similar box-plots over a feature) and their efficacy as predictors for whether a person gets subscribed or not (prevalence of single value through dataset in **pdays**, **previous**). Specialized treatment should be given to outliers, that arise in every feature and impact it.
+After thorough EDA we have collected a battery of knowledge to test against the data. Those include distribution types (normality of age, exponential for duration and number of calls), independence of categorical and numerical features (low correlation scores, similar box-plots over a feature) and their efficacy as predictors for whether a person gets subscribed or not (prevalence of single value through dataset in **pdays**, **poutcome**, **previous**). Specialized treatment should be given to outliers, that arise in every feature and impact it.

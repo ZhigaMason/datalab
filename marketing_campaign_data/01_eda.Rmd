@@ -259,9 +259,9 @@ histogram_desc(
     breaks = 50
 )
 ```
-This plot has a lot in common with **balance**. It also shows great number of outliers and range squeezed into bottomline. //add histograms
+This plot has a lot in common with **balance**. It also shows great number of outliers and range squeezed into bottomline.
 
-Histograms also shows fast rate of decay after 3 contacts per person, we may hypothesize that  **campaign** is distributed exponentially.
+Histograms also shows fast rate of decay after 5 contacts per person.
 
 ### Number of Days since Last Contact (pdays)
 
@@ -430,4 +430,4 @@ Most features have no records or neglectible amounts of *unknown*. **education**
 
 ## Conclusion
 
-After thorough EDA we have collected a battery of knowledge to test against the data. Those include distribution types (normality of age, exponential for duration and number of calls), independence of categorical and numerical features (low correlation scores, similar box-plots over a feature) and their efficacy as predictors for whether a person gets subscribed or not (prevalence of single value through dataset in **pdays**, **poutcome**, **previous**). Specialized treatment should be given to outliers, that arise in every feature and impact it.
+After thorough EDA we have collected a battery of knowledge to test against the data. Those include distribution types (normality of age, exponential for duration calls), independence of categorical and numerical features (low correlation scores, similar box-plots over a feature) and their efficacy as predictors for whether a person gets subscribed or not (prevalence of single value through dataset in **pdays**, **poutcome**, **previous**). Specialized treatment should be given to outliers, that arise in every feature and impact it.

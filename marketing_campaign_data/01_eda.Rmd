@@ -171,6 +171,15 @@ plot_rate_bars("poutcome")
 
 Most of previous outcomes are *unknown*, that is most of people had not been contacted before the campaign. Rates shows, that people who has subscribed during the last campaign, are the most likely to subscribe to the current campaign, while those who was not affected by previous campaign show opposite dynamic.
 
+### Month of Call
+
+```{r}
+plot_count_bars("month")
+plot_rate_bars("month")
+```
+
+Wee that summer monthes (*may* - *aug*) have a lot more data than other. What is ther reason for that is not yet clear, it could be just another data engineered nuance, we could later do a test to check that.
+
 ## Numerical Data
 
 We will plot box-plots of numerical features against target variable overall dataset histogram to study univariate distributions and interactions with target variable.
@@ -232,6 +241,16 @@ Both ranges are squashed, due to extreme values at the positive tail of distribu
 
 We have clipped the histograms to display greater mass of values, due to the outlier that is easily to spot at the top of boxplot. We see that almost all records are contained within (-1000, 5000) interval and distribution has a spiky bell curve.
 
+### Day of the Contact
+
+```{r}
+boxplot_mean("day")
+title("Label X Day of the Contact")
+histogram_desc("day", main = "Histogram of Day of the Contact")
+```
+
+The data follow roughly uniform shape that splits equally into positive and negative population.
+
 ### Duration of Last Call
 
 ```{r}
@@ -245,7 +264,7 @@ histogram_desc(
 
 Here we see some real difference: positive population distribution is a lot wider with median 500 seconds = 8.3 minutes, while the other classes range just barely stretches over 500. We also see many outliers in both classes. Such sharp contrast may be instrumental to *yes* population, due to the deposit arranging taking longer time, than simply declining one.
 
-The histogram follows shape of Poisson or Exponential distribution with a tail quickly vanishing after 1000 seconds.
+The histogram follows shape of Exponential distribution with a tail quickly vanishing after 1000 seconds.
 
 ### Number of Contacts during Campaign (campaign)
 

@@ -7,6 +7,8 @@ output: html_document
 
 ## Setup
 
+Let us load the data.
+
 ```{r}
 library(stats)
 library(effsize)
@@ -20,12 +22,18 @@ data = load_bank_data()
 data
 ```
 
+We will separate data into numerical and categorical for ease of further analysis.
+
 ```{r}
 numeric_data <- data[sapply(data, is.numeric)]
 categorical_data <- subset(data[sapply(data, is.factor)], select=-y)
 ```
 
 ## Distributions
+
+In this section, we will examine distributions of numerical features and conduct tests to support or reject our hypothesis. We will supplement numerical tests with Q-Q plots with 100 uniformly spaced quantiles. Our data includes 4.5 thousands features, Shapiro-Wilxon and Anderson-Darling tests, that we will be using in this part are notorious for being sensetive to small deviations, so we hope to capture at least some aspects of data distributions. Another reason to use Q-Q plots is, that Anderson-Darling good-fit-test sharply assumes knowledge of theoretical parameters of distributions, which we have no access to, so we will resort to pulled parameters estimated using methods of moments. A computed p-value will be only an approximation, that way. Nevertheless, Q-Q plots are constructed only as a guidance, so they do not provide statistical inference.
+
+We also will not study **previous** and **pdays** as a large portion of their values is *0* or *-1* respectively. Their examination would require removal of those values and further study of residual data.
 
 ```{r}
 qqpercentile_plot <- function(x, dist_name, dist_func, ...) {
@@ -44,13 +52,14 @@ qqpercentile_plot <- function(x, dist_name, dist_func, ...) {
         ylab = "Sample Quantiles",
         pch = 1, col = "black"
     )
-    par(new =T)
     abline(0, 1, col='red', lty= 2)
 }
 ```
 
-
 ### Age
+
+In the EDA notebook we have discussed that **age** might be normally distributed. Let us test this hypothesis and plot quantiles to quantiles. Our null hypothesis is that **age** variable has normal distribution, alternative is that **age** does not have normal distribution. To test that we will use Shapiro-Wilxon test.
+
 ```{r}
 x <- data$age
 
@@ -58,11 +67,13 @@ mean_hat <- mean(x)
 sd_hat <- sd(x)
 
 qqpercentile_plot(
-    x, "Normal", qnorm, , mean = mean_hat, sd = sd_hat
+    x, "Normal", qnorm, mean = mean_hat, sd = sd_hat
 )
 
 shapiro.test(x)
 ```
+
+Though Q-Q plot shows quantile points close to the theoretical line for most of quantile range, Shapiro-Wilxon test gives a p-value much lesser than 0.05, and we reject the null hypothesis. If we look closely to the Q-Q plot, we can see great deviation in lower tail. We can also check for the lognormal distribution, because age is strictly positive variable. The null hypothesis now is that **age** is distributed lognormally, alternative is otherwise. We will conduct Anderson-Darling test.
 
 ```{r}
 x <- data$age
@@ -71,14 +82,18 @@ meanlog_hat <- mean(log(x))
 sdlog_hat <- sd(log(x))
 
 qqpercentile_plot(
-    x, "LogNormal", qlnorm, , meanlog = meanlog_hat, sdlog = sdlog_hat
+    x, "LogNormal", qlnorm, meanlog = meanlog_hat, sdlog = sdlog_hat
 )
 plnorm_fit <- function(x) plnorm(x, meanlog = meanlog_hat, sdlog = sdlog_hat)
 
-ad.test(x_pos, null = plnorm_fit)
+ad.test(x, null = plnorm_fit)
 ```
 
+Quantiles now stick even closer to the line, yet p-value is small enough to reject the null hypothesis. As we have discussed at the beginning of the section, with large sample sizes it is common for distribution shape tests to fail on miniscule deviations. 
+
 ### Duration of Last Call
+
+During EDA we have suggested that data might be exponentially distributed. It makes sense as the call is more likely to end early and whether the call should end depends only on its timespan, but not the starting point, i.e. distribution of its ceasing is memoryless.
 
 ```{r}
 x <- data$duration
@@ -92,7 +107,11 @@ pexp_fit <- function(x) pexp(x, rate = rate_hat)
 ad.test(x, null = pexp_fit)
 ```
 
+Once again we see a Q-Q plot suggests statment about distribution of data, that **duration** has exponential distribution, yet we must reject the null hypothesis.
+
 ### Balance
+
+Balance histogram is unimodal and roughly symmetrical, so it would be adequate to think that it has normal distribution.
 
 ```{r}
 x <- data$balance
@@ -101,45 +120,42 @@ mean_hat <- mean(x)
 sd_hat <- sd(x)
 
 qqpercentile_plot(
-    x, "Normal", qnorm, , mean = mean_hat, sd = sd_hat
+    x, "Normal", qnorm, mean = mean_hat, sd = sd_hat
 )
 
 shapiro.test(x)
 ```
 
-```{r}
-x <- data$balance
-x <- x - min(x) + 1e-6
-
-meanlog_hat <- mean(log(x))
-sdlog_hat <- sd(log(x))
-
-qqpercentile_plot(
-    x, "LogNormal", qlnorm, , meanlog = meanlog_hat, sdlog = sdlog_hat
-)
-plnorm_fit <- function(x) plnorm(x, meanlog = meanlog_hat, sdlog = sdlog_hat)
-
-ad.test(x_pos, null = plnorm_fit)
-```
+Q-Q plot shows that quantiles do not follow the line even slightly, test also shows that we should reject the null hypothesis of normality of **balance**.
 
 ### Number of Calls during Campaign
+
+In EDA notebook it was suggested that **campaign** might be negative binomially distributed, due to nature of variable (number of successful trials). It is discrete random variable, so we cannot make a Q-Q plot, instead we will plot poisson mdf over data histogram.
+
 ```{r}
 x <- data$campaign - 1 # taking part in campaign produces minimal value of 1
 
-lambda_hat <- mean(x)
 hist(
     x,
     main = "Histogram of # of Calls during Last campaign vs Poisson",
     xlab = "# of calls", freq=F, breaks=20
 )
 
-points(0:max(x), dpois(0:max(x), lambda_hat), type = "h", col = "blue", lwd = 2)
+mean_hat <- mean(x)
+var_hat <- var(x)
+n_hat <- (mean_hat^2) / (var_hat - mean_hat)
+p_hat <- n_hat / (n_hat + mean_hat)
 
-ppois_fit <- function(x) ppois(x, lambda = lambda_hat)
-ad.test(x, null = ppois_fit)
+points(0:max(x), dnbinom(0:max(x), size=n_hat, p=p_hat), type = "h", col = "blue", lwd = 2)
+
+pnbinom_fit <- function(x) pnbinom(x, size=n_hat, p=p_hat)
+ad.test(x, null = pnbinom_fit)
 ```
+The plot shows that neighborhood of zero is much less probable than fitted negative binomial distribution suggests and after that they behave similarly, but AD test yields too little p-value, so we must reject the null hypothesis. 
 
 ## Catgorical vs Target
+
+For every categorical feature we want to know whether it has association with target variable. For all categorical features, the null hypothesis is the feature and target variable are independent. Alternative states otherwise. We will do Pearson's chi squared to test these hypothesis.
 
 ```{r, warning=FALSE}
 res <- c()
@@ -147,12 +163,24 @@ for (col in colnames(categorical_data)) {
     ct <- table(data$y, data[,col])
     res[col] <- chisq.test(ct)$p.value
 }
-barplot(res, las = 2, ylab = "p-value of chi2 test")
+barplot(res, las = 2, ylab = "p-value of chi2 test", main = "p-values of chi^2 test between target and features")
 par(new = T)
 abline(h=0.05, col = "red", lty=2)
+legend(
+    "topright",
+    legend = "p-value=0.05",
+    pch=15,
+    col = 'red'
+)
 ```
 
+We see that default is the only feature for which we fail to reject the null hypothesis and assume that it bears no association with target variable. Other features show extremly low p-values and thus we reject the null hypotheses, that they and target are pairwise independent.
+
 ## Numerical vs Target
+
+We would like to know whether standalone numerical features differentiate between target classes. We will check whether means conditioned by target class are different using Welsh's t-test with two-sided null hypothesis, to check how effective is the difference we will also compute Cohen's d.
+
+We have 4.5K samples, under CLT normalized mean approaches normal distribution, so we satisfy t-tests assumption.
 
 ```{r}
 res_t = c()
@@ -162,23 +190,41 @@ for (col_name in colnames(numeric_data)) {
     res_t[col_name] <- t.test(form, data=data)$p.value
     res_d[col_name] <- abs(cohen.d(form, data=data)$estimate)
 }
-barplot(res_t, las = 2, ylab = "p-value of Welsh's t-test")
+barplot(res_t, las = 2, ylab = "p-value of Welsh's t-test", main="p-values of two sample t-tests conditioned on target")
 par(new = T)
 abline(h=0.05, col = "red", lty=2)
-barplot(res_d, las=2, ylab="Cohen's d")
+legend(
+    "topright",
+    legend = "p-value=0.05",
+    pch=15,
+    col = 'red'
+)
+barplot(res_d, las=2, ylab="Cohen's d", main="Cohen's d conditioned on target")
 abline(h=0.2, col = "red", lty=2)
+legend(
+    "topright",
+    legend = "d=0.20",
+    pch=15,
+    col = 'red'
+)
 ```
+
+The only features for which we reject the null hypothesis are **balance** and **day**, for all the other we fail to reject the null hypothesis, that means conditioned by target class are statistically significantly different. Nevertheless only **balance**, **campaign**, **pdays** and **previous** have Cohen's d values that show practical significance of atleast small level (d=0.20).
 
 ## Numerical vs Numerical
 
-```{r}
+We will conduct correlation tests to check if any numerical variables are related. Due to non-normality of all our features we are left to Spearman's correlation test, so the null hypotheses are that Spearman's correlation coefficients are zeros, in other words, there is no monotonic association between two variables, alternative states otherwise.
+
+We will vizualize p-values obtained for every pair in a heatmap, where cross indicates p-value greater than 0.05, i.e. insignificant evidence in data.
+
+```{r, warning=F}
 mat <- matrix(ncol=ncol(numeric_data), nrow=ncol(numeric_data))
 rownames(mat) <- colnames(numeric_data)
 colnames(mat) <- colnames(numeric_data)
 
 for (col1 in colnames(numeric_data)) {
     for (col2 in colnames(numeric_data)) {
-        mat[col1, col2] = cor.test(data[,col1], data[,col2], method='pearson')$p.value
+        mat[col1, col2] = cor.test(data[,col1], data[,col2], method='spearman')$p.value
     }
 }
 corrplot(
@@ -188,7 +234,12 @@ corrplot(
     mar = c(1,1,1,1)
 )
 ```
+
+Most of features pairs have low p-values, but almost all pairs containing **age** have large p-values, so we must reject null hypotheses for them. The only variable for which **age** shows significant monotonic relation is **duration**. Another pair for which we fail to reject the null hypothesis is **day**-**balance**.
+
 ## Categorical vs Categorical
+
+For every pair of categorical features we will test whether they are independent, this will be the null hypothesis, alternative states that a pair of variables have significant association. We will conduct chi squared tests for this reason.
 
 ```{r, warning=FALSE}
 mat <- matrix(ncol=ncol(categorical_data), nrow=ncol(categorical_data))
@@ -209,7 +260,11 @@ corrplot(
 )
 ```
 
+Most pairs show significant association. The odd one is **default** feature, during EDA it was revealed that **default** is almost constant *no*, therefore it is independent from other variables that have more balanced class division. Other independent pairs are **loan**-**housing**, **loan**-**contact** and **marital**-**poutcome**. As we have discussed in EDA personal loans are taken by all groups of population, so its expected that it will behave more independently towards other features.
+
 ## Numerical vs Categorical
+
+We would like to check whether there is a connection between feature-classes and numerical variables. One of the way to do it is to check difference between conditioned distributions. Most of our numerical features show scarce signs of normality, so we cannot use ANOVA or AOV. Instead we will use Kruskal-Wallis test. It is similar to ANOVA, but does not require conditioned data to be normal. The null hypotheses are that conditioned distributions are the same with no regard to class, alternatice hypothesis states that otherwise.
 
 ```{r}
 mat <- matrix(ncol=ncol(numeric_data), nrow=ncol(categorical_data))
@@ -231,6 +286,8 @@ corrplot(
 )
 ```
 
-## Data-engineered Bias
+We see that **day** and **duration** are significantly differentiated by **marital**, **education** and **housing**. **default** being almost constant has great p-values with most numerical features, except **balance**, **pdays** and **previous**. Balance is not differentiated by any categorical variable, while **pdays** and **pvalues** are by **job**, **marital** and **education**. Though we fail to reject the null hypothesis, the p-value for those pairs is visibly less than for other non-rejected pairs.
 
 ## Conclusion
+
+We ran a battery of tests exploring univariate and bivariate statistics. We revealed possible strong predictors such as **age** and **duration** from numerical variables and **loan** and **housing** from categorical features. Next will be to create generic and group specific models and profile a target group.

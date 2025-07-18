@@ -1,0 +1,236 @@
+---
+title: "stat_tests"
+author: "Maksym Khavil"
+date: "2025-07-17"
+output: html_document
+---
+
+## Setup
+
+```{r}
+library(stats)
+library(effsize)
+library(goftest)
+library(corrplot)
+
+source(here::here("R", "constants.R"))
+source(here::here("R", "load_data.R"))
+
+data = load_bank_data()
+data
+```
+
+```{r}
+numeric_data <- data[sapply(data, is.numeric)]
+categorical_data <- subset(data[sapply(data, is.factor)], select=-y)
+```
+
+## Distributions
+
+```{r}
+qqpercentile_plot <- function(x, dist_name, dist_func, ...) {
+    q_n <- 100
+    
+    probs <- seq(0, 1, length.out = q_n + 2)[-c(1, q_n + 2)]
+    
+    theor_q <- dist_func(probs, ...)
+    
+    emp_q <- quantile(x, probs)
+    
+    plot(
+        theor_q, emp_q,
+        main = sprintf("Q-Q Plot: %s Fit (100 Quantiles)", dist_name),
+        xlab = sprintf("Theoretical Quantiles (%s)", dist_name),
+        ylab = "Sample Quantiles",
+        pch = 1, col = "black"
+    )
+    par(new =T)
+    abline(0, 1, col='red', lty= 2)
+}
+```
+
+
+### Age
+```{r}
+x <- data$age
+
+mean_hat <- mean(x)
+sd_hat <- sd(x)
+
+qqpercentile_plot(
+    x, "Normal", qnorm, , mean = mean_hat, sd = sd_hat
+)
+
+shapiro.test(x)
+```
+
+```{r}
+x <- data$age
+
+meanlog_hat <- mean(log(x))
+sdlog_hat <- sd(log(x))
+
+qqpercentile_plot(
+    x, "LogNormal", qlnorm, , meanlog = meanlog_hat, sdlog = sdlog_hat
+)
+plnorm_fit <- function(x) plnorm(x, meanlog = meanlog_hat, sdlog = sdlog_hat)
+
+ad.test(x_pos, null = plnorm_fit)
+```
+
+### Duration of Last Call
+
+```{r}
+x <- data$duration
+
+rate_hat <- 1 / mean(x)
+qqpercentile_plot(
+    x, "Exponential", qexp, rate = rate_hat
+)
+pexp_fit <- function(x) pexp(x, rate = rate_hat)
+
+ad.test(x, null = pexp_fit)
+```
+
+### Balance
+
+```{r}
+x <- data$balance
+
+mean_hat <- mean(x)
+sd_hat <- sd(x)
+
+qqpercentile_plot(
+    x, "Normal", qnorm, , mean = mean_hat, sd = sd_hat
+)
+
+shapiro.test(x)
+```
+
+```{r}
+x <- data$balance
+x <- x - min(x) + 1e-6
+
+meanlog_hat <- mean(log(x))
+sdlog_hat <- sd(log(x))
+
+qqpercentile_plot(
+    x, "LogNormal", qlnorm, , meanlog = meanlog_hat, sdlog = sdlog_hat
+)
+plnorm_fit <- function(x) plnorm(x, meanlog = meanlog_hat, sdlog = sdlog_hat)
+
+ad.test(x_pos, null = plnorm_fit)
+```
+
+### Number of Calls during Campaign
+```{r}
+x <- data$campaign - 1 # taking part in campaign produces minimal value of 1
+
+lambda_hat <- mean(x)
+hist(
+    x,
+    main = "Histogram of # of Calls during Last campaign vs Poisson",
+    xlab = "# of calls", freq=F, breaks=20
+)
+
+points(0:max(x), dpois(0:max(x), lambda_hat), type = "h", col = "blue", lwd = 2)
+
+ppois_fit <- function(x) ppois(x, lambda = lambda_hat)
+ad.test(x, null = ppois_fit)
+```
+
+## Catgorical vs Target
+
+```{r, warning=FALSE}
+res <- c()
+for (col in colnames(categorical_data)) {
+    ct <- table(data$y, data[,col])
+    res[col] <- chisq.test(ct)$p.value
+}
+barplot(res, las = 2, ylab = "p-value of chi2 test")
+par(new = T)
+abline(h=0.05, col = "red", lty=2)
+```
+
+## Numerical vs Target
+
+```{r}
+res_t = c()
+res_d = c()
+for (col_name in colnames(numeric_data)) {
+    form <- as.formula(paste(col_name, "~ y"))
+    res_t[col_name] <- t.test(form, data=data)$p.value
+    res_d[col_name] <- abs(cohen.d(form, data=data)$estimate)
+}
+barplot(res_t, las = 2, ylab = "p-value of Welsh's t-test")
+par(new = T)
+abline(h=0.05, col = "red", lty=2)
+barplot(res_d, las=2, ylab="Cohen's d")
+abline(h=0.2, col = "red", lty=2)
+```
+
+## Numerical vs Numerical
+
+```{r}
+mat <- matrix(ncol=ncol(numeric_data), nrow=ncol(numeric_data))
+rownames(mat) <- colnames(numeric_data)
+colnames(mat) <- colnames(numeric_data)
+
+for (col1 in colnames(numeric_data)) {
+    for (col2 in colnames(numeric_data)) {
+        mat[col1, col2] = cor.test(data[,col1], data[,col2], method='pearson')$p.value
+    }
+}
+corrplot(
+    mat, is.corr = FALSE, method = "color", p.mat = mat,
+    tl.col = "black", 
+    title = "Spearman's correlation p-values",
+    mar = c(1,1,1,1)
+)
+```
+## Categorical vs Categorical
+
+```{r, warning=FALSE}
+mat <- matrix(ncol=ncol(categorical_data), nrow=ncol(categorical_data))
+rownames(mat) <- colnames(categorical_data)
+colnames(mat) <- colnames(categorical_data)
+
+for (col1 in colnames(categorical_data)) {
+    for (col2 in colnames(categorical_data)) {
+        ct <- table(data[,col1], data[,col2])
+        mat[col1, col2] = chisq.test(ct)$p.value
+    }
+}
+corrplot(
+    mat, is.corr = FALSE, method = "color", p.mat = mat,
+    tl.col = "black", 
+    title = "Chi^2 test p-values",
+    mar = c(1,1,1,1)
+)
+```
+
+## Numerical vs Categorical
+
+```{r}
+mat <- matrix(ncol=ncol(numeric_data), nrow=ncol(categorical_data))
+rownames(mat) <- colnames(categorical_data)
+colnames(mat) <- colnames(numeric_data)
+
+for (col1 in colnames(numeric_data)) {
+    for (col2 in colnames(categorical_data)) {
+        form <- as.formula(paste(col1, "~", col2))
+        kt =  kruskal.test(form, data = data)
+        mat[col2, col1] = kt$p.value
+    }
+}
+corrplot(
+    mat, is.corr = FALSE, method = "color", p.mat = mat,
+    tl.col = "black",
+    title = "Kruskal-Wallis test p-values",
+    mar = c(1,2,1,1)
+)
+```
+
+## Data-engineered Bias
+
+## Conclusion

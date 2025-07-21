@@ -21,7 +21,7 @@ source(here::here("R", "constants.R"))
 source(here::here("R", "load_data.R"))
 
 data <- load_bank_data()
-data
+head(data)
 ```
 
 We will also define a generic function to run cross-validation. That way we will estimate accuracy on new data, we also collect all predictions to construct confusion matrix and Receiver Operator Curve. We will display AUC ROC, accuracy, f1 score, precision and recall. We model data to better profile, so we choose the metric of performance to be precision, as it is a measure of confidence of model. Nevertheless precision can be abused, so we will also keep an eye on accuracy and f1 score.
@@ -115,9 +115,11 @@ weights[data$y == 'no']  <- 1 / (1 - pos_rate)
 
 ## Baseline Models
 
-We will create dummy estimator, that predicts the most frequent class, logistic regression and decision tree.
+We will create dummy estimator, that predicts the most frequent class, logistic regression and decision tree. Then we will proceed by feature selection and engineering. We hope that we will be able to increase both precision and interpretability of models.
 
 ### Dummy Estimator
+
+Due to class imbalance dummy estimator will have high accuracy.
 
 ```{r}
 dummy_model <- function(fml, data, ...) {
@@ -126,40 +128,59 @@ dummy_model <- function(fml, data, ...) {
 
 dummy_predict <- function(train_labels, test_data) {
     majority_class <- ifelse(names(sort(table(train_labels), decreasing = TRUE))[1] == 'no', 0, 1)
-  rep(majority_class, nrow(test_data))
+    rep(majority_class, nrow(test_data))
 }
 cv_evaluate_model(dummy_model, dummy_predict)
 ```
 
+We see that accuracy matches negative rate, and precision and f1 are undefined.
+
 ### Logistic Regression
+
+We will focus on logistic regression, because it gives a clear interpretability during profiling: positive coefficients correspond to better likelihood of person subscribing.
+
 ```{r}
 cv_evaluate_model(glm, glm_predict_func, family=binomial)
 ```
 
-```{r}
+Log. regression strongly prefers negative class, which results in recall of 0.313. Nonetheless accuracy is higher negative rate and precision is greater than 0.625. Let us check weighted model.
+
+```{r, warning=FALSE}
 cv_evaluate_model(glm, glm_predict_func, family=binomial, weights=weights)
 ```
 
+By weighting our samples we have introduce heavy bias towards positive class, so now precision suffers, while recall is up, which results in higher f1 score. This is not the strategy that we try to follow, though it is still important to look at balanced case.
+
 ### Decision Tree Classifier
+
+Our motivation for decision tree classifier is later rule extraction from it. We do not expect it to perform better than linear model, though we hope to see decent result.
+
 ```{r}
 cv_evaluate_model(rpart, rpart_predict_func, maxdepth=3, cp=0)
 ```
+ROC has a sharp angle near the bottom, that indicates, that the trees were in favor of negative class. This is in agreement with low recall values. Precision is lower then the one of unweighted logistic regression, though it still presents some confidence.
 
 ```{r}
 cv_evaluate_model(rpart, rpart_predict_func, weights = weights, maxdepth=3, cp=0)
 ```
+The sharp angle on ROC moved upward, the model prefers positive class, recall is the highest of all the models we have discussed, while precision is the lowest. The result is very similar to the weighted regularized log regression's one.
 
-## Feature Selection
+## Feature Selection and Engineering
 
-### Lasso
+During EDA and statistical testing we have confronted several features as being useless (namely **default** and **pdays**). In this section we will use LASSO and greedy step AIC algorithms to find a subset of features that manifests in the best precision. If manual intervention will be needed we will engineer the data ourselves.
+
+### LASSO
+
+LASSO is a way to regularize linear models by L1 norm, resulting in sparse solutions. Those features that have zero coefficients can be safely discarded. We will use `glmnet` package LASSO implementation.
+
 ```{r}
-X <- model.matrix(y ~ ., data = data)[, -1]  # remove intercept
+X <- model.matrix(y ~ ., data = data)[, -1]
 
 y <- data$y
 y <- ifelse(y == "yes", 1, 0)
 
 model <- cv.glmnet(X, y, family = "binomial", alpha = 1)
-coefs <- coef(model, s = 'lambda.1se')  # or use s = "lambda.min" if using cv.glmnet
+coefs <- coef(model, s = 'lambda.1se')
 coefs <- as.matrix(coefs)
 
 # Get variable names with non-zero coefficients
@@ -171,14 +192,17 @@ print(coefs)
 non_zero_vars
 ```
 
+Features that we have described as being weak were indeed zeroed down by lasso, while features like **housing** and **duration** remained. The **month** feature got expanded in 12 features (corresponding to 12 degrees of freedom) and 5 of those subfeatures have not only non-zero coef. but they have high absolute value.
+
+Let us test selected features using CV.
+
 ```{r}
 lasso_data <- data[,c("y", "job", "marital", "education", "housing", "loan", "contact", "month", "duration", "poutcome")]
 cv_evaluate_model(glm, glm_predict_func, family=binomial, arg_data = lasso_data)
 ```
+We have been able to perform better with 90% accuracy and 63.2% precision. Thus we can say that our model overfitted the data.
 
-```{r}
-cv_evaluate_model(glm, glm_predict_func, family=binomial, arg_data = lasso_data, weights = weights)
-```
+Now we will try to the model trained without **month** feature.
 
 ```{r}
 build_formula <- function(arg_data, target = 'y', exclude = NULL) {
@@ -204,60 +228,52 @@ print(coefs)
 non_zero_vars
 ```
 
+An interesting observation is that without **month**, **education** and **day** features also disappeared.
+
 ```{r}
 lasso_data <- data[,c("y", "job", "marital", "housing", "loan", "contact", "duration", "poutcome")]
 cv_evaluate_model(glm, glm_predict_func, family=binomial, arg_data = lasso_data)
 ```
-
-```{r}
-cv_evaluate_model(glm, glm_predict_func, family=binomial, arg_data = lasso_data, weights = weights)
-```
+We were able to bring accuracy and precision up once more. This time it was miniscule step, but nevertheless we obtained a better model. 
 
 ### Step with AIC heuristics
+
+Next we will try to fined the best subset using greedy search with AIC heuristics.
 
 ```{r}
 step(glm(y ~ ., data, family='binomial'), direction='both', trace=0)
 ```
 
+Once again we see that **month**'s subfeatures get high coefficients. Step found a larger subset, than LASSO. Step is greedy, so it is hardered to find extreme solutions such as LASSO.
+
 ```{r}
 step_data <- data[,c("y", "marital", "education", "housing", "loan", "contact", "day", "month", "duration", "campaign", "poutcome")]
 cv_evaluate_model(glm, glm_predict_func, family=binomial, arg_data = step_data)
 ```
+We were able to find a good model. It has high precision and accuracy. Let us get rid of **month** to compare to engineered LASSO model.
 
-```{r, warning=FALSE}
-step(glm(y ~ ., data, family='binomial', weights = weights), direction='both', trace=0)
-```
-
-```{r}
-step_data <- data[,c("y", "marital", "education", "housing", "loan", "contact", "day", "month", "duration", "campaign", "poutcome")]
-cv_evaluate_model(glm, glm_predict_func, family=binomial, arg_data = lasso_data)
-```
 ```{r}
 step(glm(y ~ ., data[,setdiff(names(data), c('month'))], family='binomial'), direction='both', trace=0)
 ```
 
+This time only **day** was zeroed out, while **education** remained.
+
 ```{r}
 step_data <- data[,c("y", "job", "marital", "education", "housing", "loan", "contact", "duration", "campaign", "poutcome")]
 cv_evaluate_model(glm, glm_predict_func, family=binomial, arg_data = step_data)
 ```
-
-```{r, warning=FALSE}
-step(glm(y ~ ., data[,setdiff(names(data), c('month'))], family='binomial', weights = weights), direction='both', trace=0)
-```
-
-```{r}
-step_data <- data[,c("y", "job", "marital", "education", "housing", "loan", "contact", "duration", "campaign", "poutcome")]
-cv_evaluate_model(glm, glm_predict_func, family=binomial, weights=weights, arg_data = step_data)
-```
-
+We obtain the best model yet with precision of 66%, though It has more features than LASSO selected.
 
 ### Job aggregation
+
+All methods that we have used before showed that all **job** categories except *blue-collar* and *retired* have low or zero coefficients, so it will be meaningful to test whether we can use smaller model without loss of precision.
+
 ```{r}
 data.specific_job <- data
 data.specific_job[!(data$job == 'blue-collar' | data$job == 'retired'),"job"] <- "unknown"
-data.specific_job
+head(data.specific_job)
 ```
-
+Firstly we will run LASSO with joint jobs categories.
 ```{r}
 X <- model.matrix(build_formula(data.specific_job, exclude = 'month'), data = data)[, -1]  # remove intercept
 
@@ -277,53 +293,80 @@ print(coefs)
 non_zero_vars
 ```
 
+The feature selection resulted in the very same features as before, let us run CV.
+
 ```{r}
 lasso_data <- data.specific_job[,c("y", "job", "marital", "housing", "loan", "contact", "duration", "poutcome")]
 cv_evaluate_model(glm, glm_predict_func, family=binomial, arg_data = lasso_data)
 ```
+
+We have also obtained better results regarding precision. Let us run the same procedure with step function.
+
 ```{r}
 step(glm(y ~ ., data=data.specific_job[,setdiff(names(data), c('month'))] , family = binomial), direction = 'both', trace=0)
 ```
+The situation remains the same, the features chosen by step has not changed.
 
 ```{r}
 step_data <- data.specific_job[,c("y", "job", "marital", "education", "housing", "loan", "contact", "duration", "campaign", "poutcome")]
 cv_evaluate_model(glm, glm_predict_func, family=binomial, arg_data = step_data)
 ```
+This model also beats its previous version, though precision is slightly lower.
 
 ## Final model
-lasso, no month, not weighted, joint jobs
+
+After all feaute selection and engineering we choose LASSO model with joint **job** and excluded **month** feature.
+
 ```{r}
 final_model <- glm(y ~ job + marital + housing + loan + contact + poutcome + duration, data=data.specific_job, family=binomial)
 summary(final_model)
 ```
+We see that *single* marital status, *telephone* contact and *other*, *unknown* previous outcome are unstable, their effect on the model is not too large, due to their small coefficients, so we will not confront this.
 
 ## Assumption Verification
 
+Logistic regression assumes (besides i.i.d. and categorical target) linearity of continuous logits, no outliers and no multicollinearity. We will check those assumptions with Box-Tidwell test, Cook's distance and GVIF metric.
+
 ### Linearity of Continuous Variable Logits 
+
+We will run Box-Tidwell test that determines what power transformation makes logit linear, we test that power transformation has exponent of 1. The only continuous feature that we have is **duration**.
 
 ```{r}
 data.specific_job.numeric <- data.specific_job
 data.specific_job.numeric$y <- ifelse(data.specific_job$y == "yes", 1, 0)
-car::boxTidwell(y ~ duration, data = data.specific_job.numeric)
+boxTidwell(y ~ duration, data = data.specific_job.numeric)
 ```
+
+We must reject the null hypothesis, we will apply the power transformation with MLE estimated exponent to **duration**.
 
 ```{r}
 lambda = 0.79334
 data.specific_job.numeric$duration_transformed <- data.specific_job$duration ^ lambda
 car::boxTidwell(y ~ duration_transformed, data = data.specific_job.numeric)
 ```
+We have passed the test, let us examine fixed model.
 
 ```{r}
 final_model <- glm(y ~ job + marital + housing + loan + contact + poutcome + I(duration ^ lambda), data=data.specific_job, family=binomial)
 summary(final_model)
 ```
+The coefficients did not change, but AIC decreased as well as deviances.
 
 ### Outliers
+
+We will check for outliers in data set using Cook's d.
 
 ```{r}
 plot(final_model, which=4)
 plot(final_model, which=5)
 ```
+None of the datapoints lie outside of Cook's d range, so formally we have no outliers. On the other hand sample 569 has the largest distance, though it has low leverage we shall take a look at it.
+
+```{r}
+data[569,]
+```
+
+The biggest quirk of this sample is long call **duration** (3000s=50 minutes), yet it still has not subscribed to the deposit. We will remove this sample, because we have enough data and its low leverage guarantee that it will not hurt our model.
 
 ```{r}
 final_model <- glm(y ~ job + marital + housing + loan + contact + poutcome + I(duration ^ lambda), data=data.specific_job[-569,], family=binomial)
@@ -334,27 +377,83 @@ summary(final_model)
 plot(final_model, which=4)
 plot(final_model, which=5)
 ```
+
+With no strong outliers we can proceed to the last assumption.
+
 ### Multicollinearity
 
+Logistic regression is a linear model and can suffer a lot from multicollinearity. Base R implementation does not use any regularization, so it can destroy our model. Luckily LASSO usually removes collinear features, so we should be good to go.
+
 ```{r}
-car::vif(final_model)
+vif(final_model)
 ```
+
+All adjusted GVIF values are way lower than 2, so we can assume that no multicollinearity is present in the data. Let us plot last ROC curve and confusion matrix.
+
+```{r}
+
+y_true_all <- data.specific_job$y
+y_prob_all <- glm_predict_func(final_model, data.specific_job)
+y_pred_all <- ifelse(y_prob_all > 0.5, "yes", "no")
+y_pred_all <- factor(y_pred_all, levels = c("no", "yes"))
+
+cm <- table(Predicted = y_pred_all, Actual = y_true_all)
+
+tp <- cm["yes", "yes"]
+tn <- cm["no", "no"]
+fp <- cm["yes", "no"]
+fn <- cm["no", "yes"]
+
+accuracy <- (tp + tn) / sum(cm)
+precision <- tp / (tp + fp)
+recall <- tp / (tp + fn)
+f1 <- 2 * precision * recall / (precision + recall)
+
+
+corrplot(
+  cm,
+  is.corr = F, method = "color", tl.col = "black", addCoef.col = "black",
+  xlab = "Ground Truth", ylab = "Prediction", mar=c(3,0,3,0),
+  title = "Confusion Matrix", cl.pos = 'n', col=c('bisque', 'lightblue')
+)
+mtext("Ground Truth", side = 3, line=1, cex = 1.2)
+mtext("Predictions", side = 2, line=0, cex = 1.2)
+
+roc_obj <- roc(y_true_all, y_prob_all, levels=c("no", "yes"), direction='<')
+plot(roc_obj, col = "red", main = "ROC Curve")
+
+legend(
+  "bottomright",
+  legend = c(
+      sprintf("AUC = %.3f", auc(roc_obj)),
+      sprintf("F1 = %.3f", f1),
+      sprintf("Accuracy = %.3f", accuracy),
+      sprintf("Precision = %.3f", precision),
+      sprintf("Recall = %.3f", recall)
+  )
+)
+```
+These are purely training values, though we still have large enough precision and good accuracy. The model still favors negative class, though not as sharply as before.
 
 ## Final Decision Tree
 
-```{r}
-data.lasso_specific_job <- data.specific_job[,c("y", "job", "marital", "housing", "loan", "contact", "duration", "poutcome")]
-cv_evaluate_model(rpart, rpart_predict_func, arg_data = data.lasso_specific_job)
-```
+Lastly we will train decision tree for further rule extraction.
 
 ```{r}
+data.lasso_specific_job <- data.specific_job[,c("y", "job", "marital", "housing", "loan", "contact", "duration", "poutcome")]
 tree_model <- rpart(y ~ ., data.lasso_specific_job, maxdepth=3, cp=0)
 rpart.plot(tree_model)
 ```
 
+Most of the leaf nodes that predict positive class have close to 50% positive population, so the rules extracted from this tree should be taken with a grain of salt.
+
 ## Wrap up
+
+Now we will save our models.
 
 ```{r}
 saveRDS(final_model, file=here::here("models", "log_regression.rds"))
 saveRDS(tree_model,  file=here::here("models", "decision_tree.rds"))
 ```
+
+In this notebook we have done feature selection both manual and automatic. Next step is to use all the collected knowledge to design target profile.

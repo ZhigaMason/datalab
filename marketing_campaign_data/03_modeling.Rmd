@@ -1,0 +1,360 @@
+---
+title: "03_modeling"
+author: "Maksym Khavil"
+date: "2025-07-19"
+output: html_document
+---
+
+## Setup 
+
+Let us load the data and libraries.
+```{r}
+library(stats)
+library(glmnet)
+library(rpart)
+library(rpart.plot)
+library(pROC)
+library(corrplot)
+library(car)
+
+source(here::here("R", "constants.R"))
+source(here::here("R", "load_data.R"))
+
+data <- load_bank_data()
+data
+```
+
+We will also define a generic function to run cross-validation. That way we will estimate accuracy on new data, we also collect all predictions to construct confusion matrix and Receiver Operator Curve. We will display AUC ROC, accuracy, f1 score, precision and recall. We model data to better profile, so we choose the metric of performance to be precision, as it is a measure of confidence of model. Nevertheless precision can be abused, so we will also keep an eye on accuracy and f1 score.
+
+```{r}
+cv_evaluate_model <- function(model_func, predict_func, weights = NULL, k = 5, seed = 42, arg_data=data, ...) {
+      set.seed(seed)
+    
+      n <- nrow(data)
+      folds <- sample(rep(1:k, length.out = n))
+      
+      y_true_all <- c()
+      y_pred_all <- c()
+      y_prob_all <- c()
+    
+      for (i in 1:k) {
+          train_idx <- which(folds != i)
+          test_idx  <- which(folds == i)
+      
+          train_data <- arg_data[train_idx, ]
+          test_data  <- arg_data[test_idx, ]
+          model <- NULL
+          if(!is.null(weights)){
+            train_weights <- weights[train_idx]
+            model <- model_func(y ~ ., data=train_data, weights=train_weights, ...)
+          }
+          else {
+            model <- model_func(y ~ ., data=train_data, ...)
+          }
+      
+          
+          prob <- predict_func(model, test_data)
+          pred <- ifelse(prob > 0.5, "yes", "no")
+          
+          y_true_all <- c(y_true_all, test_data[['y']])
+          y_pred_all <- c(y_pred_all, pred)
+          y_prob_all <- c(y_prob_all, prob)
+      }
+    
+      y_true_all <- factor(ifelse(y_true_all == 1, 'no', 'yes'), levels = c("no", "yes"))
+      y_pred_all <- factor(y_pred_all, levels = c("no", "yes"))
+    
+      cm <- table(Predicted = y_pred_all, Actual = y_true_all)
+    
+      tp <- cm["yes", "yes"]
+      tn <- cm["no", "no"]
+      fp <- cm["yes", "no"]
+      fn <- cm["no", "yes"]
+    
+      accuracy <- (tp + tn) / sum(cm)
+      precision <- tp / (tp + fp)
+      recall <- tp / (tp + fn)
+      f1 <- 2 * precision * recall / (precision + recall)
+    
+      
+      corrplot(
+          cm,
+          is.corr = F, method = "color", tl.col = "black", addCoef.col = "black",
+          xlab = "Ground Truth", ylab = "Prediction", mar=c(3,0,3,0),
+          title = "Confusion Matrix", cl.pos = 'n', col=c('bisque', 'lightblue')
+      )
+      mtext("Ground Truth", side = 3, line=1, cex = 1.2)
+      mtext("Predictions", side = 2, line=0, cex = 1.2)
+    
+      roc_obj <- roc(y_true_all, y_prob_all, levels=c("no", "yes"), direction='<')
+      plot(roc_obj, col = "red", main = "ROC Curve")
+      
+      legend(
+          "bottomright",
+          legend = c(
+              sprintf("AUC = %.3f", auc(roc_obj)),
+              sprintf("F1 = %.3f", f1),
+              sprintf("Accuracy = %.3f", accuracy),
+              sprintf("Precision = %.3f", precision),
+              sprintf("Recall = %.3f", recall)
+          )
+      )
+}
+
+glm_predict_func <- function(model, newdata) predict(model, newdata, type = "response")
+rpart_predict_func = function(model, newdata) predict(model, newdata, type = "prob")[, "yes"]
+```
+
+Let us define weights as inverse of classes' rates. that way both classes' weights sum up to the same number.
+```{r}
+weights <- as.double(data$y)
+pos_rate <- mean(data$y == 'yes')
+weights[data$y == 'yes'] <- 1 / pos_rate 
+weights[data$y == 'no']  <- 1 / (1 - pos_rate)
+```
+
+## Baseline Models
+
+We will create dummy estimator, that predicts the most frequent class, logistic regression and decision tree.
+
+### Dummy Estimator
+
+```{r}
+dummy_model <- function(fml, data, ...) {
+    data$y
+}
+
+dummy_predict <- function(train_labels, test_data) {
+    majority_class <- ifelse(names(sort(table(train_labels), decreasing = TRUE))[1] == 'no', 0, 1)
+  rep(majority_class, nrow(test_data))
+}
+cv_evaluate_model(dummy_model, dummy_predict)
+```
+
+### Logistic Regression
+```{r}
+cv_evaluate_model(glm, glm_predict_func, family=binomial)
+```
+
+```{r}
+cv_evaluate_model(glm, glm_predict_func, family=binomial, weights=weights)
+```
+
+### Decision Tree Classifier
+```{r}
+cv_evaluate_model(rpart, rpart_predict_func, maxdepth=3, cp=0)
+```
+
+```{r}
+cv_evaluate_model(rpart, rpart_predict_func, weights = weights, maxdepth=3, cp=0)
+```
+
+## Feature Selection
+
+### Lasso
+```{r}
+X <- model.matrix(y ~ ., data = data)[, -1]  # remove intercept
+
+y <- data$y
+y <- ifelse(y == "yes", 1, 0)
+
+model <- cv.glmnet(X, y, family = "binomial", alpha = 1)
+coefs <- coef(model, s = 'lambda.1se')  # or use s = "lambda.min" if using cv.glmnet
+coefs <- as.matrix(coefs)
+
+# Get variable names with non-zero coefficients
+non_zero_vars <- rownames(coefs)[which(coefs != 0)]
+non_zero_vars <- setdiff(non_zero_vars, "(Intercept)")
+
+
+print(coefs)
+non_zero_vars
+```
+
+```{r}
+lasso_data <- data[,c("y", "job", "marital", "education", "housing", "loan", "contact", "month", "duration", "poutcome")]
+cv_evaluate_model(glm, glm_predict_func, family=binomial, arg_data = lasso_data)
+```
+
+```{r}
+cv_evaluate_model(glm, glm_predict_func, family=binomial, arg_data = lasso_data, weights = weights)
+```
+
+```{r}
+build_formula <- function(arg_data, target = 'y', exclude = NULL) {
+  predictors <- setdiff(names(arg_data), c(target, exclude))
+  as.formula(paste(target, "~", paste(predictors, collapse = " + ")))
+}
+
+X <- model.matrix(build_formula(data, exclude = 'month'), data = data)[, -1]  # remove intercept
+
+y <- data$y
+y <- ifelse(y == "yes", 1, 0)
+
+model <- cv.glmnet(X, y, family = "binomial", alpha = 1)
+coefs <- coef(model, s = 'lambda.1se')  # or use s = "lambda.min" if using cv.glmnet
+coefs <- as.matrix(coefs)
+
+# Get variable names with non-zero coefficients
+non_zero_vars <- rownames(coefs)[which(coefs != 0)]
+non_zero_vars <- setdiff(non_zero_vars, "(Intercept)")
+
+
+print(coefs)
+non_zero_vars
+```
+
+```{r}
+lasso_data <- data[,c("y", "job", "marital", "housing", "loan", "contact", "duration", "poutcome")]
+cv_evaluate_model(glm, glm_predict_func, family=binomial, arg_data = lasso_data)
+```
+
+```{r}
+cv_evaluate_model(glm, glm_predict_func, family=binomial, arg_data = lasso_data, weights = weights)
+```
+
+### Step with AIC heuristics
+
+```{r}
+step(glm(y ~ ., data, family='binomial'), direction='both', trace=0)
+```
+
+```{r}
+step_data <- data[,c("y", "marital", "education", "housing", "loan", "contact", "day", "month", "duration", "campaign", "poutcome")]
+cv_evaluate_model(glm, glm_predict_func, family=binomial, arg_data = step_data)
+```
+
+```{r, warning=FALSE}
+step(glm(y ~ ., data, family='binomial', weights = weights), direction='both', trace=0)
+```
+
+```{r}
+step_data <- data[,c("y", "marital", "education", "housing", "loan", "contact", "day", "month", "duration", "campaign", "poutcome")]
+cv_evaluate_model(glm, glm_predict_func, family=binomial, arg_data = lasso_data)
+```
+```{r}
+step(glm(y ~ ., data[,setdiff(names(data), c('month'))], family='binomial'), direction='both', trace=0)
+```
+
+```{r}
+step_data <- data[,c("y", "job", "marital", "education", "housing", "loan", "contact", "duration", "campaign", "poutcome")]
+cv_evaluate_model(glm, glm_predict_func, family=binomial, arg_data = step_data)
+```
+
+```{r, warning=FALSE}
+step(glm(y ~ ., data[,setdiff(names(data), c('month'))], family='binomial', weights = weights), direction='both', trace=0)
+```
+
+```{r}
+step_data <- data[,c("y", "job", "marital", "education", "housing", "loan", "contact", "duration", "campaign", "poutcome")]
+cv_evaluate_model(glm, glm_predict_func, family=binomial, weights=weights, arg_data = step_data)
+```
+
+
+### Job aggregation
+```{r}
+data.specific_job <- data
+data.specific_job[!(data$job == 'blue-collar' | data$job == 'retired'),"job"] <- "unknown"
+data.specific_job
+```
+
+```{r}
+X <- model.matrix(build_formula(data.specific_job, exclude = 'month'), data = data)[, -1]  # remove intercept
+
+y <- data$y
+y <- ifelse(y == "yes", 1, 0)
+
+model <- cv.glmnet(X, y, family = "binomial", alpha = 1)
+coefs <- coef(model, s = 'lambda.1se')  # or use s = "lambda.min" if using cv.glmnet
+coefs <- as.matrix(coefs)
+
+# Get variable names with non-zero coefficients
+non_zero_vars <- rownames(coefs)[which(coefs != 0)]
+non_zero_vars <- setdiff(non_zero_vars, "(Intercept)")
+
+
+print(coefs)
+non_zero_vars
+```
+
+```{r}
+lasso_data <- data.specific_job[,c("y", "job", "marital", "housing", "loan", "contact", "duration", "poutcome")]
+cv_evaluate_model(glm, glm_predict_func, family=binomial, arg_data = lasso_data)
+```
+```{r}
+step(glm(y ~ ., data=data.specific_job[,setdiff(names(data), c('month'))] , family = binomial), direction = 'both', trace=0)
+```
+
+```{r}
+step_data <- data.specific_job[,c("y", "job", "marital", "education", "housing", "loan", "contact", "duration", "campaign", "poutcome")]
+cv_evaluate_model(glm, glm_predict_func, family=binomial, arg_data = step_data)
+```
+
+## Final model
+lasso, no month, not weighted, joint jobs
+```{r}
+final_model <- glm(y ~ job + marital + housing + loan + contact + poutcome + duration, data=data.specific_job, family=binomial)
+summary(final_model)
+```
+
+## Assumption Verification
+
+### Linearity of Continuous Variable Logits 
+
+```{r}
+data.specific_job.numeric <- data.specific_job
+data.specific_job.numeric$y <- ifelse(data.specific_job$y == "yes", 1, 0)
+car::boxTidwell(y ~ duration, data = data.specific_job.numeric)
+```
+
+```{r}
+lambda = 0.79334
+data.specific_job.numeric$duration_transformed <- data.specific_job$duration ^ lambda
+car::boxTidwell(y ~ duration_transformed, data = data.specific_job.numeric)
+```
+
+```{r}
+final_model <- glm(y ~ job + marital + housing + loan + contact + poutcome + I(duration ^ lambda), data=data.specific_job, family=binomial)
+summary(final_model)
+```
+
+### Outliers
+
+```{r}
+plot(final_model, which=4)
+plot(final_model, which=5)
+```
+
+```{r}
+final_model <- glm(y ~ job + marital + housing + loan + contact + poutcome + I(duration ^ lambda), data=data.specific_job[-569,], family=binomial)
+summary(final_model)
+```
+
+```{r}
+plot(final_model, which=4)
+plot(final_model, which=5)
+```
+### Multicollinearity
+
+```{r}
+car::vif(final_model)
+```
+
+## Final Decision Tree
+
+```{r}
+data.lasso_specific_job <- data.specific_job[,c("y", "job", "marital", "housing", "loan", "contact", "duration", "poutcome")]
+cv_evaluate_model(rpart, rpart_predict_func, arg_data = data.lasso_specific_job)
+```
+
+```{r}
+tree_model <- rpart(y ~ ., data.lasso_specific_job, maxdepth=3, cp=0)
+rpart.plot(tree_model)
+```
+
+## Wrap up
+
+```{r}
+saveRDS(final_model, file=here::here("models", "log_regression.rds"))
+saveRDS(tree_model,  file=here::here("models", "decision_tree.rds"))
+```

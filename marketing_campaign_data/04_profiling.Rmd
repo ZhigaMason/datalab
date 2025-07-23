@@ -1,0 +1,234 @@
+---
+title: "04_profiling"
+author: "Maksym Khavil"
+date: "2025-07-23"
+output: html_document
+---
+
+## Setup 
+
+Let us load the data and libraries.
+```{r}
+library(stats)
+library(rpart)
+library(rpart.plot)
+library(corrplot)
+library(car)
+library(vioplot)
+
+source(here::here("R", "constants.R"))
+source(here::here("R", "load_data.R"))
+
+data <- load_bank_data()
+logistic_regression <- readRDS(here::here("models", "log_regression.rds"))
+decision_tree <- readRDS(here::here("models", "decision_tree.rds"))
+head(data)
+```
+
+```{r}
+data.joint_job <- data
+data.joint_job[!(data$job == 'blue-collar' | data$job == 'retired'),"job"] <- "unknown"
+data.pos <- data[data$y == 'yes',]
+data.joint_job.pos <- data.joint_job[data.joint_job$y == 'yes',]
+
+summary(logistic_regression)
+rpart.plot(decision_tree)
+```
+
+### Data separatation
+```{r}
+plot_count_bars <- function(col, arg_data, ...) {
+    pos_labeled = arg_data[arg_data$y == "yes",]
+    neg_labeled = arg_data[arg_data$y == "no",]
+    pos <- aggregate(x = list(count = pos_labeled$y), by = list(column = pos_labeled[,col]), FUN = length)
+    neg <- aggregate(x = list(count = neg_labeled$y), by = list(column = neg_labeled[,col]), FUN = length)
+    data_matrix <- matrix(
+        c( pos$count,  neg$count), nrow = 2, byrow = TRUE
+    )
+    colnames(data_matrix) <- pos$column
+    rownames(data_matrix) <- c("Pos. Cnt", "Neg. Cnt")
+    barplot(
+        data_matrix,
+        beside = TRUE,
+        legend = rownames(data_matrix),
+        main = sprintf("Class Counts X %s", col),
+        xlab = col, ylab = "Class Counts",
+        ...
+    )
+    grid()
+}
+
+plot_rate_bars <- function(col, arg_data, ...) {
+    pos_labeled = arg_data[arg_data$y == "yes",]
+    neg_labeled = arg_data[arg_data$y == "no",]
+    par(mar=c(5, 4, 6, 2))
+    total_cnt <- aggregate(x = list(count = arg_data$y), by = list(column = arg_data[,col]), FUN = length)$count
+    pos <- aggregate(x = list(count = pos_labeled$y), by = list(column = pos_labeled[,col]), FUN = length)
+    neg <- aggregate(x = list(count = neg_labeled$y), by = list(column = neg_labeled[,col]), FUN = length)
+    data_matrix <- matrix(
+        c( pos$count / total_cnt,  neg$count / total_cnt), nrow = 2, byrow = TRUE
+    )
+    colnames(data_matrix) <- pos$column
+    rownames(data_matrix) <- c("Pos. Rate", "Neg. Rate")
+    barplot(
+        data_matrix,
+        main = sprintf("Class Rates X %s", col),
+        ylim=c(0,1),
+        xlab = col, ylab = "Class Rates",
+        ...
+    )
+    grid()
+    legend(
+        "topright",
+        legend = rownames(data_matrix),
+        xpd = T,
+        fill=c("black", "grey"),
+        inset=c(0, -0.2)
+    )
+}
+```
+
+```{r}
+data.joint_job$score <- predict(logistic_regression, newdata=data.joint_job, type='response')
+data.joint_job$segment <- cut(data.joint_job$score, breaks = c(-Inf, 0.3, 0.7, Inf), labels = c("Low", "Medium", "High"), ordered_result = T)
+
+data.joint_job.pos$score <- predict(logistic_regression, newdata = data.joint_job.pos, type='response')
+data.joint_job.pos$segment <- cut(data.joint_job.pos$score, breaks = c(-Inf, 0.3, 0.7, Inf), labels = c("Low", "Medium", "High"), ordered_result = T)
+
+plot_count_bars("segment", data.joint_job)
+plot_rate_bars( "segment", data.joint_job)
+```
+
+```{r}
+data.joint_job.low    <- data.joint_job[data.joint_job$segment == "Low",]
+data.joint_job.medium <- data.joint_job[data.joint_job$segment == "Medium",]
+data.joint_job.high   <- data.joint_job[data.joint_job$segment == "High",]
+```
+
+## Data analysis
+
+```{r}
+plot_segment_table <- function(col, arg_data = data.joint_job) {
+}
+```
+
+```{r}
+for(col in colnames(data.joint_job[sapply(data.joint_job, is.factor)])) {
+    if(col == "segment" || col == "y"){ next}
+    ct = table(data.joint_job[,col], data.joint_job$segment)
+    par(mar=c(3,4,1,2))
+    mosaicplot(
+        ct, ylab="Segment", xlab=col,
+        main=sprintf("Segment X %s", col),
+        las = 2
+    )
+}
+```
+
+```{r}
+ylim=c(0, 1)
+for(col in colnames(data.joint_job[sapply(data.joint_job, is.numeric)])) {
+    if(col == "score") {next}
+    fml <- as.formula(paste(col, " ~ segment"))
+    par(mfrow=c(1, 2))
+    boxplot(fml, data.joint_job, col=COLORS[col])
+    vioplot(fml, data.joint_job, col=COLORS[col])
+}
+```
+
+## Creating Profiles
+
+housing = no
+loan = yes
+
+job = "retired", "student"
+
+poutcome = success
+pdays > 100
+
+TODO:
+write generic function that displays percent of subscribed in a profile, volume of a profile, conducts two-sample t-test and computes cohen's d
+
+### Univariate
+```{r}
+profile_data <- data[(data$housing == "no"), "y"]
+length(profile_data)
+mean(ifelse(profile_data == "yes", 1, 0))
+```
+
+```{r}
+profile_data <- data[(data$loan == "yes"), "y"]
+length(profile_data)
+mean(ifelse(profile_data == "yes", 1, 0))
+```
+```{r}
+profile_data <- data[(data$job == "student"), "y"]
+length(profile_data)
+mean(ifelse(profile_data == "yes", 1, 0))
+```
+
+```{r}
+profile_data <- data[(data$job == "retired"), "y"]
+length(profile_data)
+mean(ifelse(profile_data == "yes", 1, 0))
+```
+
+```{r}
+profile_data <- data[(data$poutcome == "success"), "y"]
+length(profile_data)
+mean(ifelse(profile_data == "yes", 1, 0))
+```
+
+```{r}
+profile_data <- data[(data$poutcome == "other"), "y"]
+length(profile_data)
+mean(ifelse(profile_data == "yes", 1, 0))
+```
+```{r}
+profile_data <- data[(data$poutcome == "success") | (data$poutcome == "other"), "y"]
+length(profile_data)
+mean(ifelse(profile_data == "yes", 1, 0))
+```
+
+```{r}
+profile_data <- data[(data$pdays > 100), "y"]
+length(profile_data)
+mean(ifelse(profile_data == "yes", 1, 0))
+```
+
+## Bivariate
+
+```{r}
+profile_data <- data[(data$poutcome == "success") & (data$housing == "no"), "y"]
+length(profile_data)
+mean(ifelse(profile_data == "yes", 1, 0))
+```
+
+```{r}
+profile_data <- data[(data$poutcome == "success") & (data$loan == "yes"), "y"]
+length(profile_data)
+mean(ifelse(profile_data == "yes", 1, 0))
+```
+```{r}
+profile_data <- data[(data$job == "retired") & (data$housing == "no"), "y"]
+length(profile_data)
+mean(ifelse(profile_data == "yes", 1, 0))
+```
+
+```{r}
+profile_data <- data[(data$job == "retired") & (data$loan == "yes"), "y"]
+length(profile_data)
+mean(ifelse(profile_data == "yes", 1, 0))
+```
+
+```{r}
+profile_data <- data[(data$pdays > 100) & (data$previous == "other"), "y"]
+length(profile_data)
+mean(ifelse(profile_data == "yes", 1, 0))
+```
+
+```{r}
+profile_data <- data[(data$loan == "yes") | (data$housing == "no"), "y"]
+length(profile_data)
+mean(ifelse(profile_data == "yes", 1, 0))
+```

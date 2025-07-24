@@ -15,6 +15,7 @@ library(rpart.plot)
 library(corrplot)
 library(car)
 library(vioplot)
+library(effsize)
 
 source(here::here("R", "constants.R"))
 source(here::here("R", "load_data.R"))
@@ -108,11 +109,6 @@ data.joint_job.high   <- data.joint_job[data.joint_job$segment == "High",]
 ## Data analysis
 
 ```{r}
-plot_segment_table <- function(col, arg_data = data.joint_job) {
-}
-```
-
-```{r}
 for(col in colnames(data.joint_job[sapply(data.joint_job, is.factor)])) {
     if(col == "segment" || col == "y"){ next}
     ct = table(data.joint_job[,col], data.joint_job$segment)
@@ -144,91 +140,166 @@ loan = yes
 job = "retired", "student"
 
 poutcome = success
-pdays > 100
+pdays > 0
 
-TODO:
-write generic function that displays percent of subscribed in a profile, volume of a profile, conducts two-sample t-test and computes cohen's d
+
+```{r}
+num_y <- ifelse(data$y == "yes", 1, 0)
+cohen.h <- function(p1, p2) {
+  2 * asin(sqrt(p1)) - 2 * asin(sqrt(p2))
+}
+analyse_profile <- function(profile_bool, baseline.data = num_y) {
+    num_profile <- ifelse(baseline.data[profile_bool], 1, 0)
+    num_comp_profile <- ifelse(baseline.data[!profile_bool], 1, 0)
+    
+    print("--------------------------------------------------", quote=F)
+    print(sprintf("Coverage:        %d samples = %.1f%% of dataset", length(num_profile), 100 * length(num_profile) / length(baseline.data)), quote=F)
+    print(sprintf("Positives:       %d samples = %.1f%% of profile", sum(num_profile), 100 * mean(num_profile)), quote=F)
+    print("--------------------------------------------------", quote=F)
+    if (length(num_profile) < 1 || sum(num_profile) < 1) return()
+    
+    
+    p_profile <- mean(num_profile)
+    p_baseline <- mean(baseline.data)
+    
+    prop_pvalue <- prop.test(x = c(sum(num_profile), sum(num_comp_profile)), n = c(length(num_profile), length(num_comp_profile)), alternative = "less")$p.value
+    binom_pvalue <- binom.test(sum(num_profile), length(num_profile), p=p_baseline, alternative = "less")$p.value # estimate
+    print(sprintf("Proportion test p-value against profile's compliment:     %.3f", prop_pvalue), quote=F)
+    print(sprintf("Exact Binomial test p-value:                              %.3f", binom_pvalue), quote=F)
+    
+    print("--------------------------------------------------", quote=F)
+    cohen_h <- cohen.h(p_profile, p_baseline)
+    risk_difference <- p_profile - p_baseline
+    odds_ratio <- p_profile * (1 - p_profile) / (p_baseline * (1 - p_baseline))
+    
+    
+    print(sprintf("Cohen's h value: %.3f", cohen_h), quote=F)
+    print(sprintf("Risk difference: %.3f", risk_difference), quote=F)
+    print(sprintf("Odds ratio:      %.3f", odds_ratio), quote=F)
+    print("--------------------------------------------------", quote=F)
+    print("", quote=F)
+}
+```
 
 ### Univariate
 ```{r}
-profile_data <- data[(data$housing == "no"), "y"]
-length(profile_data)
-mean(ifelse(profile_data == "yes", 1, 0))
+analyse_profile(data$housing == "no")
+```
+
+
+```{r}
+analyse_profile(data$loan == "yes")
 ```
 
 ```{r}
-profile_data <- data[(data$loan == "yes"), "y"]
-length(profile_data)
-mean(ifelse(profile_data == "yes", 1, 0))
-```
-```{r}
-profile_data <- data[(data$job == "student"), "y"]
-length(profile_data)
-mean(ifelse(profile_data == "yes", 1, 0))
+print("Job = student")
+analyse_profile(data$job == "student")
+print("Job = retired")
+analyse_profile(data$job == "retired")
 ```
 
 ```{r}
-profile_data <- data[(data$job == "retired"), "y"]
-length(profile_data)
-mean(ifelse(profile_data == "yes", 1, 0))
+print("Previous outcome = success")
+analyse_profile(data$poutcome == "success")
+print("Previous outcome = other")
+analyse_profile(data$poutcome == "other")
+print("Previous outcome = other or success")
+analyse_profile((data$poutcome == "success") | (data$poutcome == "other"))
 ```
 
 ```{r}
-profile_data <- data[(data$poutcome == "success"), "y"]
-length(profile_data)
-mean(ifelse(profile_data == "yes", 1, 0))
+analyse_profile(data$pdays > 0)
 ```
 
 ```{r}
-profile_data <- data[(data$poutcome == "other"), "y"]
-length(profile_data)
-mean(ifelse(profile_data == "yes", 1, 0))
+print("Balance greater than 0")
+analyse_profile(data$balance > 0)
+print("Balance greater than 100")
+analyse_profile(data$balance > 100)
+print("Balance greater than 500")
+analyse_profile(data$balance > 500)
+print("Balance greater than 1000")
+analyse_profile(data$balance > 1000)
 ```
+
+### Bivariate
+
 ```{r}
-profile_data <- data[(data$poutcome == "success") | (data$poutcome == "other"), "y"]
-length(profile_data)
-mean(ifelse(profile_data == "yes", 1, 0))
+print("Previous outcome = success & housing = no")
+analyse_profile((data$poutcome == "success") & (data$housing == "no"))
+print("Previous outcome = success & loan = yes")
+analyse_profile((data$poutcome == "success") & (data$loan == "yes"))
 ```
 
 ```{r}
-profile_data <- data[(data$pdays > 100), "y"]
-length(profile_data)
-mean(ifelse(profile_data == "yes", 1, 0))
-```
-
-## Bivariate
-
-```{r}
-profile_data <- data[(data$poutcome == "success") & (data$housing == "no"), "y"]
-length(profile_data)
-mean(ifelse(profile_data == "yes", 1, 0))
+print("Previous outcome = other & housing = no")
+analyse_profile((data$poutcome == "other") & (data$housing == "no"))
+print("Previous outcome = other & loan = yes")
+analyse_profile((data$poutcome == "other") & (data$loan == "yes"))
 ```
 
 ```{r}
-profile_data <- data[(data$poutcome == "success") & (data$loan == "yes"), "y"]
-length(profile_data)
-mean(ifelse(profile_data == "yes", 1, 0))
-```
-```{r}
-profile_data <- data[(data$job == "retired") & (data$housing == "no"), "y"]
-length(profile_data)
-mean(ifelse(profile_data == "yes", 1, 0))
+print("Previous outcome = (other or success) & housing = no")
+analyse_profile((data$poutcome %in% c("other", "success")) & (data$housing == "no"))
+print("Previous outcome = (other or success) & loan = yes")
+analyse_profile((data$poutcome %in% c("other", "success")) & (data$loan == "yes"))
 ```
 
 ```{r}
-profile_data <- data[(data$job == "retired") & (data$loan == "yes"), "y"]
-length(profile_data)
-mean(ifelse(profile_data == "yes", 1, 0))
+print("Job = retired & housing = no")
+analyse_profile((data$job == "retired") & (data$housing == "no"))
+print("Job = retired & loan = yes")
+analyse_profile((data$job == "retired") & (data$loan == "yes"))
 ```
 
 ```{r}
-profile_data <- data[(data$pdays > 100) & (data$previous == "other"), "y"]
-length(profile_data)
-mean(ifelse(profile_data == "yes", 1, 0))
+print("Job = student & housing = no")
+analyse_profile((data$job == "student") & (data$housing == "no"))
+print("Job = student & loan = yes")
+analyse_profile((data$job == "student") & (data$loan == "yes"))
 ```
 
 ```{r}
-profile_data <- data[(data$loan == "yes") | (data$housing == "no"), "y"]
-length(profile_data)
-mean(ifelse(profile_data == "yes", 1, 0))
+analyse_profile((data$pdays > 0) & (data$previous %in% c("other", "success")))
 ```
+
+```{r}
+analyse_profile((data$loan == "yes") | (data$housing == "no"))
+```
+```{r}
+analyse_profile((data$job == "retired") & (data$balance > 0))
+```
+
+```{r}
+analyse_profile((data$housing == "no") & (data$pdays > 0))
+```
+
+## Profiles
+
+Hosing = no and pdays > 0 (have being previously contacted and have capacity to subscribe to a deposit)
+
+job = retired and loan = yes (retired people who have capacity and motivation to grow their fortune)
+
+## Test on full dataset
+
+```{r}
+full_data <- load_bank_data("bank-full.csv")
+```
+
+```{r}
+num_y_full <- ifelse(full_data$y == "yes", 1, 0)
+analyse_profile((full_data$housing == "no") & (full_data$pdays > 0), baseline.data = num_y_full)
+```
+
+```{r}
+analyse_profile((full_data$job == "retired") & (full_data$balance > 0), baseline.data = num_y_full)
+```
+
+Profile intersection
+```{r}
+analyse_profile((full_data$job == "retired") & (full_data$balance > 0) & (full_data$housing == "no") & (full_data$pdays > 0), baseline.data = num_y_full)
+```
+
+## Conclusion
+
+

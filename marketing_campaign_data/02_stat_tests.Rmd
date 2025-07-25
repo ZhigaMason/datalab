@@ -1,9 +1,15 @@
 ---
-title: "stat_tests"
+title: "Conducting Statistical Tests"
 author: "Maksym Khavil"
 date: "2025-07-17"
-output: html_document
+output: 
+    pdf_document:
+        toc: true
+        number_sections: true
+        latex_engine: xelatex
 ---
+
+# Conducting Statistical Tests
 
 ## Setup
 
@@ -19,7 +25,7 @@ source(here::here("R", "constants.R"))
 source(here::here("R", "load_data.R"))
 
 data = load_bank_data()
-data
+head(data)
 ```
 
 We will separate data into numerical and categorical for ease of further analysis.

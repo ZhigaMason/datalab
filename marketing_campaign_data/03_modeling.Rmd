@@ -1,9 +1,15 @@
 ---
-title: "03_modeling"
+title: "Modeling"
 author: "Maksym Khavil"
 date: "2025-07-19"
-output: html_document
+output: 
+    pdf_document:
+        toc: true
+        number_sections: true
+        latex_engine: xelatex
 ---
+
+# Modelling
 
 ## Setup 
 
@@ -449,10 +455,6 @@ Most of the leaf nodes that predict positive class have close to 50% positive po
 ## Wrap up
 
 Now we will save our models.
-```{r}
-length(predict.glm(final_model, newdata=data.joint_job, type='response'))
-```
-
 ```{r}
 saveRDS(final_model, file=here::here("models", "log_regression.rds"))
 saveRDS(tree_model,  file=here::here("models", "decision_tree.rds"))

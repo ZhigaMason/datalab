@@ -1,17 +1,15 @@
 ---
-title: "01_eda"
+title: "Explanatory Data Analysis"
 author: "Maksym Khavil"
 date: "2025-07-15"
 output: 
-    html_document:
+    pdf_document:
         toc: true
-        theme: yeti
         number_sections: true
+        latex_engine: xelatex
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
+# Explanatory Data Analysis
 
 ## Loading data
 
@@ -24,7 +22,7 @@ source(here::here("R", "constants.R"))
 source(here::here("R", "load_data.R"))
 
 data = load_bank_data()
-data
+head(data)
 ```
 Let us separate the data into positive and negative samples for the ease of further analysis.
 

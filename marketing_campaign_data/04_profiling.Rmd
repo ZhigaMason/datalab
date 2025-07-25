@@ -1,9 +1,15 @@
 ---
-title: "04_profiling"
+title: "Profiling"
 author: "Maksym Khavil"
 date: "2025-07-23"
-output: html_document
+output: 
+    pdf_document:
+        toc: true
+        number_sections: true
+        latex_engine: xelatex
 ---
+
+# Profiling
 
 ## Setup 
 

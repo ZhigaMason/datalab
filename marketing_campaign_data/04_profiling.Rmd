@@ -26,6 +26,8 @@ decision_tree <- readRDS(here::here("models", "decision_tree.rds"))
 head(data)
 ```
 
+We will also transform the data the same way that we have done during modeling.
+
 ```{r}
 data.joint_job <- data
 data.joint_job[!(data$job == 'blue-collar' | data$job == 'retired'),"job"] <- "unknown"
@@ -36,7 +38,9 @@ summary(logistic_regression)
 rpart.plot(decision_tree)
 ```
 
-### Data separatation
+### Data segmentation
+
+In this subsection we will segment the dataset into three parts, based on logistic regression predictions. The predicted probability lying in interval (0, 0.3) will correspond to *Low*, (0.3, 0.7) to *Medium* and (0.7, 1.0) to *High* segments.
 ```{r}
 plot_count_bars <- function(col, arg_data, ...) {
     pos_labeled = arg_data[arg_data$y == "yes",]
@@ -99,19 +103,17 @@ data.joint_job.pos$segment <- cut(data.joint_job.pos$score, breaks = c(-Inf, 0.3
 plot_count_bars("segment", data.joint_job)
 plot_rate_bars( "segment", data.joint_job)
 ```
-
-```{r}
-data.joint_job.low    <- data.joint_job[data.joint_job$segment == "Low",]
-data.joint_job.medium <- data.joint_job[data.joint_job$segment == "Medium",]
-data.joint_job.high   <- data.joint_job[data.joint_job$segment == "High",]
-```
+The population is primarily in *Low* segment, while *Medium* and *High* segments have a lot less samples, but more than a half of them are labelled positively.
 
 ## Data analysis
 
+In this section we will conduct an examination of interactions between features and **segment**. It must generally follow structure of target variables interactions, though we expect to understand structure of data better.
+
+We will start by plotting mosaic plots of contigency tables segment versus categorical features.
 ```{r}
-for(col in colnames(data.joint_job[sapply(data.joint_job, is.factor)])) {
+for(col in colnames(data[sapply(data, is.factor)])) {
     if(col == "segment" || col == "y"){ next}
-    ct = table(data.joint_job[,col], data.joint_job$segment)
+    ct = table(data[,col], data.joint_job$segment)
     par(mar=c(3,4,1,2))
     mosaicplot(
         ct, ylab="Segment", xlab=col,
@@ -120,7 +122,9 @@ for(col in colnames(data.joint_job[sapply(data.joint_job, is.factor)])) {
     )
 }
 ```
+Most features do not differentiate between segments, the ones that do are **job** (specifically *retired*, *student* and *housemaid* are more likely to subscribe to a deposit), **housing** and **loan** (in both categories *no** is preferred by *Medium* segment) and **poutcome** with *success* and *other* showing great proportion in *Medium* and *High*.
 
+Now we will investigate relationship between **segment** and numerical features. We will use boxplot and violinplot. 
 ```{r}
 ylim=c(0, 1)
 for(col in colnames(data.joint_job[sapply(data.joint_job, is.numeric)])) {
@@ -131,17 +135,13 @@ for(col in colnames(data.joint_job[sapply(data.joint_job, is.numeric)])) {
     vioplot(fml, data.joint_job, col=COLORS[col])
 }
 ```
+The greatest distinction is in **duration**, though as we have discussed it must be instrumental for subscribing to deposits. Minor interactions are present in **pdays**, **previous** and **balance** with *Low* values being concentrated in the neighborhood of zero. We will check those features for profiling.
 
 ## Creating Profiles
 
-housing = no
-loan = yes
+We have gathered a packet of features and values to check: **housing** and **loan** with *no*; **job** with *retired*, *student* and *housemaid*; **pdays**, **previous** and **balance** with strictly positive values. We will create univariate and bivariate profiles, that balance between positive rate and coverage.
 
-job = "retired", "student"
-
-poutcome = success
-pdays > 0
-
+We will compute size of profiles, positive proportion. We will also conduct proportion test to check that deposit subscribers are more likely in the profile, than in its compliment, as well as a binomial test to check profile against the whole dataset. To measure how practically significant is profile we will compute Cohen's h, Risk Difference and Odds Ratio.
 
 ```{r}
 num_y <- ifelse(data$y == "yes", 1, 0)
@@ -154,7 +154,13 @@ analyse_profile <- function(profile_bool, baseline.data = num_y) {
     
     print("--------------------------------------------------", quote=F)
     print(sprintf("Coverage:        %d samples = %.1f%% of dataset", length(num_profile), 100 * length(num_profile) / length(baseline.data)), quote=F)
-    print(sprintf("Positives:       %d samples = %.1f%% of profile", sum(num_profile), 100 * mean(num_profile)), quote=F)
+    print(
+        sprintf(
+            "Positives:       %d samples = %.1f%% of profile = %.1f%% of all positives",
+            sum(num_profile), 100 * mean(num_profile), 100 * sum(num_profile) / sum(baseline.data)
+        ),
+        quote=F
+    )
     print("--------------------------------------------------", quote=F)
     if (length(num_profile) < 1 || sum(num_profile) < 1) return()
     
@@ -182,21 +188,26 @@ analyse_profile <- function(profile_bool, baseline.data = num_y) {
 ```
 
 ### Univariate
+
+During exploration of single variable we would like to find profiles that have both wide coverage, have greater proportion of positive samples than dataset and have Cohen's h greater than 0.1.
+
 ```{r}
+print("Housing = no")
 analyse_profile(data$housing == "no")
+print("Loan = no")
+analyse_profile(data$loan == "no")
 ```
-
-
-```{r}
-analyse_profile(data$loan == "yes")
-```
+Both binary features show very wide coverage (housing - 43%, loan - 85%), though effect size metrics show low values. We will use these features in combinations with other features to try to imptove positive rate.
 
 ```{r}
 print("Job = student")
 analyse_profile(data$job == "student")
+print("Job = housemaid")
+analyse_profile(data$job == "housemaid")
 print("Job = retired")
 analyse_profile(data$job == "retired")
 ```
+Both *student* and *housemaid* have awful coverage under 2.5%. *Housemaid* also has tiny improvment, so we discard it right away. *Retired* is a relatively large population with good positive rate, so we expect it to behave great in interaction profiles.
 
 ```{r}
 print("Previous outcome = success")
@@ -206,10 +217,27 @@ analyse_profile(data$poutcome == "other")
 print("Previous outcome = other or success")
 analyse_profile((data$poutcome == "success") | (data$poutcome == "other"))
 ```
+Previous outcome indeed shows great results with unified group covering 7.2% dataset and more than doubling the odds. The question is whether it is just a connection with a bank, or the result of previous campaign that let people to subscribe to a deposit.
 
 ```{r}
-analyse_profile(data$pdays > 0)
+print("Contacts during previous campaign > 0")
+analyse_profile(data$previous > 0)
+print("Contacts during previous campaign > 2")
+analyse_profile(data$previous > 1)
+print("Contacts during previous campaign  > 5")
+analyse_profile(data$pdays > 5)
 ```
+Shrinking allowed window only made the profile narrow, without improving positive rate, so we will stick with any strictly positive number of contacts during previous campaign. 
+
+```{r}
+print("Days since last concact during previous campaign > 0")
+analyse_profile(data$pdays > 0)
+print("Days since last concact during previous campaign > 100")
+analyse_profile(data$pdays > 100)
+print("Days since last concact during previous campaign > 200")
+analyse_profile(data$pdays > 200)
+```
+Pushing the boundary up for the number of days since last contact during previous campaign has made the profile only worse, so we will keep the widest that is *pdays > 0*.
 
 ```{r}
 print("Balance greater than 0")
@@ -220,86 +248,134 @@ print("Balance greater than 500")
 analyse_profile(data$balance > 500)
 print("Balance greater than 1000")
 analyse_profile(data$balance > 1000)
+print("Balance greater than 5000")
+analyse_profile(data$balance > 5000)
 ```
 
+Balance over one thousand has great coverage of 33% and a promising positive rate of 15%. We hope to improve with other features.
+
 ### Bivariate
+
+Here we will try to refine our profiles.
 
 ```{r}
 print("Previous outcome = success & housing = no")
 analyse_profile((data$poutcome == "success") & (data$housing == "no"))
-print("Previous outcome = success & loan = yes")
-analyse_profile((data$poutcome == "success") & (data$loan == "yes"))
+print("Previous outcome = success & loan = no")
+analyse_profile((data$poutcome == "success") & (data$loan == "no"))
 ```
+Intersection with **poutcome** covers a small patch of dataset, so we will not proceed with this.
 
 ```{r}
 print("Previous outcome = other & housing = no")
 analyse_profile((data$poutcome == "other") & (data$housing == "no"))
-print("Previous outcome = other & loan = yes")
-analyse_profile((data$poutcome == "other") & (data$loan == "yes"))
+print("Previous outcome = other & loan = no")
+analyse_profile((data$poutcome == "other") & (data$loan == "no"))
 ```
+**poutcome** *other* profiles are also very small and additionally not as good.
 
 ```{r}
 print("Previous outcome = (other or success) & housing = no")
 analyse_profile((data$poutcome %in% c("other", "success")) & (data$housing == "no"))
-print("Previous outcome = (other or success) & loan = yes")
-analyse_profile((data$poutcome %in% c("other", "success")) & (data$loan == "yes"))
+print("Previous outcome = (other or success) & loan = no")
+analyse_profile((data$poutcome %in% c("other", "success")) & (data$loan == "no"))
 ```
+Union of previous profiles gives better results, but still covers little patch.
 
 ```{r}
 print("Job = retired & housing = no")
 analyse_profile((data$job == "retired") & (data$housing == "no"))
-print("Job = retired & loan = yes")
-analyse_profile((data$job == "retired") & (data$loan == "yes"))
+print("Job = retired & loan = no")
+analyse_profile((data$job == "retired") & (data$loan == "no"))
 ```
+Those profiles are good, though coverage of 4% is not ideal, let us seek further.
 
 ```{r}
 print("Job = student & housing = no")
 analyse_profile((data$job == "student") & (data$housing == "no"))
-print("Job = student & loan = yes")
-analyse_profile((data$job == "student") & (data$loan == "yes"))
+print("Job = student & loan = no")
+analyse_profile((data$job == "student") & (data$loan == "no"))
 ```
+Student profiles was refined only into even smaller profile, so we will reject this profile.
 
 ```{r}
-analyse_profile((data$pdays > 0) & (data$previous %in% c("other", "success")))
+analyse_profile((data$pdays > 0) & ((data$poutcome == "other") | (data$poutcome == "success")))
 ```
 
+Unsurprisingly this profile matches **poutcome** *other* or *success* completely, this was done more as an integrety check.
+
 ```{r}
-analyse_profile((data$loan == "yes") | (data$housing == "no"))
+analyse_profile((data$loan == "no") | (data$housing == "no"))
 ```
+Union of two of the widest profiles has resulted in the profile that spans more than 90% of data, but positive rate is close to the baseline, so we will not use this profile.
+
 ```{r}
 analyse_profile((data$job == "retired") & (data$balance > 0))
 ```
+
+This is not the best profile, but it will be easy to search for such people so, we are going to use it later.
 
 ```{r}
 analyse_profile((data$housing == "no") & (data$pdays > 0))
 ```
 
+This profile is extremely good as it shows coverage of 6.6% while more than its third had subscribed to the deposit.
+
 ## Profiles
 
-Hosing = no and pdays > 0 (have being previously contacted and have capacity to subscribe to a deposit)
+We have chosen three profiles:
 
-job = retired and loan = yes (retired people who have capacity and motivation to grow their fortune)
+ - Previous Campaign Outcome = other or success (have good history with the bank)
 
-## Test on full dataset
+ - Housing = no and Previous days > 0 (have being previously contacted and have capacity to subscribe to a deposit)
 
-```{r}
-full_data <- load_bank_data("bank-full.csv")
-```
-
-```{r}
-num_y_full <- ifelse(full_data$y == "yes", 1, 0)
-analyse_profile((full_data$housing == "no") & (full_data$pdays > 0), baseline.data = num_y_full)
-```
+ - Job = retired and balance > 0 (retired people who have capacity and motivation to grow their fortune)
+ 
+Let us take a look at individual profiles once more and than investigate how different they really are.
 
 ```{r}
-analyse_profile((full_data$job == "retired") & (full_data$balance > 0), baseline.data = num_y_full)
+print("Previous Campaign Outcome = other or success")
+analyse_profile(data$poutcome %in% c("other", "success"))
+print("Housing = no and Previous days > 0")
+analyse_profile((data$housing == "no") & (data$pdays > 0))
+print("Job = retired and balance > 0")
+analyse_profile((data$job == "retired") & (data$balance > 0))
+```
+Now we will take a look at pairwise intersections of profiles
+```{r}
+print("Previous Campaign Outcome = other or success and Housing = no and Previous days > 0")
+prof <- data$poutcome %in% c("other", "success") & (data$housing == "no") & (data$pdays > 0)
+print(sprintf("Number of samples: %d = %.1f%% of dataset", sum(prof), 100 * mean(prof)))
+print("", quote=F)
+
+print("Housing = no and Previous days > 0 and Job = retired and balance > 0")
+prof <- (data$housing == "no") & (data$pdays > 0) & (data$job == "retired") & (data$balance > 0)
+print(sprintf("Number of samples: %d = %.1f%% of dataset", sum(prof), 100 * mean(prof)))
+print("", quote=F)
+
+print("Job = retired and balance > 0 and Previous Campaign Outcome = other or success")
+prof <- (data$job == "retired") & (data$balance > 0) & data$poutcome %in% c("other", "success")
+print(sprintf("Number of samples: %d = %.1f%% of dataset", sum(prof), 100 * mean(prof)))
+print("", quote=F)
+
+print("Intersection of all profiles")
+prof <- (data$job == "retired") & (data$balance > 0) & data$poutcome %in% c("other", "success") & (data$housing == "no") & (data$pdays > 0)
+print(sprintf("Number of samples: %d = %.1f%% of dataset", sum(prof), 100 * mean(prof)))
 ```
 
-Profile intersection
+Most of intersections have neglectable intersection, but **poutcome** = *other* or *success* with **housing** = *no* and **pdays** > 0 intersect roughly as a half of their profiles. They still represent different populations. Let us see union of all profiles.
+
 ```{r}
-analyse_profile((full_data$job == "retired") & (full_data$balance > 0) & (full_data$housing == "no") & (full_data$pdays > 0), baseline.data = num_y_full)
+analyse_profile(
+    (data$poutcome %in% c("other", "success")) |
+    (data$housing == "no") & (data$pdays > 0) |
+    (data$job == "retired") & (data$balance > 0)
+)
 ```
+
+Together profiles cover more than a third of all who had subscribed to the deposit, while covering 14% of population. It also doubles the odds of subscription compared to raw dataset. We call it a success.
 
 ## Conclusion
 
+We have done thorough examination of profiles and arrived at three profiles, that cover total 35% of people who subscribe. The room for improvment is to check other multivariate profiles, those could be guided by a different model, perhaps more flexible like random forest, polynomial logistic regression or support vector machine.
 

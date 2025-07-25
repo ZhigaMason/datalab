@@ -1,0 +1,19 @@
+---
+title: "Bank Marketing Profiles"
+author: "Maksym Khavil"
+date: "2025-07-25"
+output: 
+    pdf_document:
+        toc: true
+        number_sections: true
+        latex_engine: xelatex
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Here is a complete research conduct on [Bank Marketing dataset](https://archive.ics.uci.edu/dataset/222/bank+marketing), where we derive a profile for future campaign based on data. In this research we do explanatory data analysis, modeling customer behaviour using statistical logistic regression and profile the population based on obtained knowledge.
+
+```{r, child=c("01_eda.Rmd", "02_stat_tests.Rmd", "03_modeling.Rmd", "04_profiling.Rmd")}
+```

@@ -264,7 +264,7 @@ cv_evaluate_model(glm, glm_predict_func, family=binomial, arg_data = step_data)
 ```
 We obtain the best model yet with precision of 66%, though It has more features than LASSO selected.
 
-### Job aggregation
+### Job Aggregation
 
 All methods that we have used before showed that all **job** categories except *blue-collar* and *retired* have low or zero coefficients, so it will be meaningful to test whether we can use smaller model without loss of precision.
 
@@ -340,7 +340,6 @@ boxTidwell(y ~ duration, data = data.specific_job.numeric)
 We must reject the null hypothesis, we will apply the power transformation with MLE estimated exponent to **duration**.
 
 ```{r}
-lambda = 0.79334
 data.specific_job.numeric$duration_transformed <- data.specific_job$duration ^ lambda
 car::boxTidwell(y ~ duration_transformed, data = data.specific_job.numeric)
 ```
@@ -450,6 +449,9 @@ Most of the leaf nodes that predict positive class have close to 50% positive po
 ## Wrap up
 
 Now we will save our models.
+```{r}
+length(predict.glm(final_model, newdata=data.joint_job, type='response'))
+```
 
 ```{r}
 saveRDS(final_model, file=here::here("models", "log_regression.rds"))

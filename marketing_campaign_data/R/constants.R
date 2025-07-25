@@ -19,3 +19,5 @@ COLORS = c(
     
     y = "#aaaaaa"
 )
+
+lambda = 0.79334

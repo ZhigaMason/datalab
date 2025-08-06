@@ -13,15 +13,17 @@ This project focuses on statistically rigorous and interpretable population prof
 - Identify and validate high-performing customer segments (profiling)
 
 ## Project Structure
+```
 .
-├── 01\_eda.Rmd
-├── 02\_stat\_tests.Rmd
-├── 03\_modeling.Rmd
-├── 04\_profiling.Rmd
+├── 01_eda.Rmd
+├── 02_stat_tests.Rmd
+├── 03_modeling.Rmd
+├── 04_profiling.Rmd
 ├── master.Rmd       # Master notebook to render all four notebooks into single PDF file
 ├── data/            # Directory for raw data
 ├── models/          # Directory for models saved as RDS files
 └── R/               # Directory for R scipts
+```
 
 All Rmarkdown files have their knitted pdf options on the same level as the notebooks are.
 

@@ -176,18 +176,21 @@ def train(args) -> Path:
                     if args.jepa:
                         ctx, _ = model.context(x, m)
                         record["pred_std"] = normalized_std(model.predictor(ctx.flatten(0, 1)[:4096])).item()
-                if args.jepa and min(record["emb_std"], record["pred_std"]) < COLLAPSE_STD:
-                    if not collapse:
+                if args.jepa and done > warmup:
+                    now_collapsed = min(record["emb_std"], record["pred_std"]) < COLLAPSE_STD
+                    if now_collapsed and not collapse:
                         warnings.warn(f"representation collapse suspected at step {done}")
-                    collapse = True
-                    record["collapse_warning"] = True
+                    collapse = now_collapsed
+                    if collapse:
+                        record["collapse_warning"] = True
                 log(record)
-                t0, tokens_seen = time.time(), 0
             if args.eval_every and done % args.eval_every == 0:
                 ev = evaluate_all(benchmarks, vocab.index, model.emb.weight.detach().float())
                 log({"step": done, **ev})
             if done % args.ckpt_every == 0:
                 _save_ckpt(ckpt_path, model, opt, sched, done, collapse)
+            if done % args.log_every == 0 or done == total:
+                t0, tokens_seen = time.time(), 0
 
         _save_ckpt(ckpt_path, model, opt, sched, end, collapse)
     if end < total:

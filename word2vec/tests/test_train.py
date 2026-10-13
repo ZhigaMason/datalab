@@ -22,7 +22,7 @@ def test_schedules():
 def _args(root, *extra, mode="bidir", jepa=False, steps=6):
     argv = ["--lang", "en", "--mode", mode, "--dim", "16", "--batch", "4", "--seq-len", "64", "--neg", "32",
             "--max-steps", str(steps), "--log-every", "2", "--eval-every", "3", "--ckpt-every", "3",
-            "--n-vicreg", "64", "--device", "cpu", "--no-compile",
+            "--n-vicreg", "64", "--subsample-t", "0", "--device", "cpu", "--no-compile",
             "--data-dir", str(root / "data"), "--runs-dir", str(root / "runs"), *extra]
     if jepa:
         argv.append("--jepa")
@@ -71,3 +71,14 @@ def test_resume_refuses_changed_config(tiny_data):
 def test_window_wider_than_encoded_pad_is_rejected(tiny_data):
     with pytest.raises(ValueError, match="pad"):
         train(_args(tiny_data, "--window", "6"))
+
+
+def test_jepa_resume_matches_uninterrupted_run(tiny_data):
+    straight = train(_args(tiny_data, "--run-dir", str(tiny_data / "runs/straight"), jepa=True))
+    interrupted = tiny_data / "runs/interrupted"
+    train(_args(tiny_data, "--run-dir", str(interrupted), "--stop-after", "3", jepa=True))
+    train(_args(tiny_data, "--run-dir", str(interrupted), jepa=True))
+    a = torch.load(straight / "ckpt.pt", weights_only=False)["model"]
+    b = torch.load(interrupted / "ckpt.pt", weights_only=False)["model"]
+    for k in ("emb.weight", "emb_ema.weight", "predictor.weight", "predictor.bias"):
+        torch.testing.assert_close(a[k], b[k])

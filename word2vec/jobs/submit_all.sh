@@ -36,24 +36,36 @@ if [[ "$SKIP_PREP" != 1 ]]; then
     fi
 fi
 
+GPU_QUEUE=${GPU_QUEUE:-gpu_dgx}  # gpu_dgx: one 2-GPU job per language; gpu: one 1-GPU job per run
 for L in $LANGS; do
     DEP=()
     if [[ -n "${VOCAB_JOB[$L]:-}" ]]; then DEP=(-W depend=afterok:"${VOCAB_JOB[$L]}"); fi
+    RUNS=()
     for V in $VARIANTS; do
         MODE=${V%-jepa}
         JEPA=0
-        [[ "$V" == *-jepa ]] && JEPA=1
+        SUFFIX=""
+        if [[ "$V" == *-jepa ]]; then JEPA=1; SUFFIX="-jepa"; fi
         for D in $DIMS; do
             for S in $SEEDS; do
-                NAME="${L}-${MODE}$([[ $JEPA == 1 ]] && echo -jepa)-d${D}-s${S}"  # mirrors train.pbs
+                NAME="${L}-${MODE}${SUFFIX}-d${D}-s${S}"  # mirrors train_run.sh
                 if [[ -f "$W2V_RUNS/$NAME/final_metrics.json" ]]; then
                     echo "skip $NAME: finished"
                     continue
                 fi
-                id=$(qsub "${DEP[@]}" -N "w2v-$L-$V-d$D-s$S" \
-                    -v W2V_LANG="$L",MODE="$MODE",JEPA="$JEPA",DIM="$D",SEED="$S",EPOCHS="$EPOCHS" jobs/train.pbs)
-                echo "train $L $V d$D s$S: $id"
+                if [[ "$GPU_QUEUE" == gpu_dgx ]]; then
+                    RUNS+=("$L/$V/$D/$S")
+                else
+                    id=$(qsub "${DEP[@]}" -N "w2v-$L-$V-d$D-s$S" \
+                        -v W2V_LANG="$L",MODE="$MODE",JEPA="$JEPA",DIM="$D",SEED="$S",EPOCHS="$EPOCHS" jobs/train.pbs)
+                    echo "train $L $V d$D s$S: $id"
+                fi
             done
         done
     done
+    if [[ "$GPU_QUEUE" == gpu_dgx && ${#RUNS[@]} -gt 0 ]]; then
+        id=$(qsub "${DEP[@]}" -N "w2v-$L-dgx" \
+            -v RUNS="$(IFS=+; echo "${RUNS[*]}")",EPOCHS="$EPOCHS" jobs/train_dgx.pbs)
+        echo "train $L (${#RUNS[@]} runs on gpu_dgx): $id"
+    fi
 done

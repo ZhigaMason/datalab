@@ -1,0 +1,32 @@
+#!/bin/bash
+#PBS -N w2v-train-dgx
+#PBS -j oe
+#PBS -q gpu_dgx
+#PBS -l select=1:ncpus=16:ngpus=2:mem=128gb:scratch_ssd=100gb
+#PBS -l walltime=8:00:00
+# Several runs on one 2-GPU node (gpu_dgx requires >= 2 GPUs): two lanes, one per GPU.
+# Env: RUNS="lang/variant/dim/seed+lang/variant/dim/seed+..." [EPOCHS] [TRAIN_BUDGET].
+set -euo pipefail
+cd "$PBS_O_WORKDIR"
+source jobs/config.sh
+: "${RUNS:?set RUNS}"
+nvidia-smi || true
+IFS='+' read -r -a ALL <<< "$RUNS"
+
+lane() {  # $1 = lane index = GPU index
+    local g=$1 i fail=0 L V D S
+    for (( i = g; i < ${#ALL[@]}; i += 2 )); do
+        IFS='/' read -r L V D S <<< "${ALL[$i]}"
+        W2V_LANG=$L MODE=${V%-jepa} JEPA=$([[ $V == *-jepa ]] && echo 1 || echo 0) DIM=$D SEED=$S \
+            CUDA_VISIBLE_DEVICES=$g WORK="$SCRATCHDIR/$L-$V-d$D-s$S" bash jobs/train_run.sh || fail=1
+    done
+    return "$fail"
+}
+
+lane 0 & p0=$!
+lane 1 & p1=$!
+rc=0
+wait "$p0" || rc=1
+wait "$p1" || rc=1
+if (( rc == 0 )); then clean_scratch || true; else echo "some runs failed; resubmit to resume them" >&2; fi
+exit "$rc"

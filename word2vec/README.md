@@ -37,14 +37,14 @@ uv run python -m w2v.train --lang cs --mode causal --jepa --dim 64 --batch 8 --s
 git clone <this repo> "$W2V_STORAGE/datalab" && cd "$W2V_STORAGE/datalab/word2vec"
 $EDITOR jobs/config.sh             # set W2V_STORAGE
 jobs/setup_env.sh                  # once: uv + locked environment on storage
-jobs/submit_all.sh                 # download -> preprocess (array) -> vocab/encode -> 12 training jobs
+jobs/submit_all.sh                 # download -> preprocess (array) -> vocab/encode -> one 2-GPU gpu_dgx training job per language
 DIMS="100 300 500" SKIP_PREP=1 jobs/submit_all.sh   # more sizes once data exists
 qstat -u "$USER"
 uv run --frozen --no-sync python -m scripts.compare --runs-dir "$W2V_RUNS" --out "$W2V_STORAGE/results"
 ```
 
 If an upstream job fails, its dependents stay held (`qstat -u $USER` shows them as H); `qdel` them and resubmit.
-A training job stops after `TRAIN_BUDGET` (default 50m) and resumes when resubmitted; `qsub -v ...,TRAIN_BUDGET=...` can change it alongside a longer walltime.
+Training goes to `gpu_dgx` by default (`jobs/train_dgx.pbs`: the queue requires >= 2 GPUs, so each language's runs share one 2-GPU job, one run per GPU at a time); `GPU_QUEUE=gpu jobs/submit_all.sh` submits one 1-GPU `jobs/train.pbs` job per run instead. Both use `jobs/train_run.sh` per run. Each run stops after `TRAIN_BUDGET` (default 50m) and resumes when resubmitted; `qsub -v ...,TRAIN_BUDGET=...` can change it alongside a longer walltime.
 Training jobs resume from `ckpt.pt` when resubmitted (same variables). English is capped
 to the larger of the Czech/Ukrainian token counts, so its vocab job waits for both.
 Czech/Ukrainian analogy benchmarks keep only semantic categories (lemmatization removes

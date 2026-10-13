@@ -38,7 +38,7 @@ def verify_onnx(path, weight: torch.Tensor, atol: float = 1e-5) -> float:
     ids[0, 0], ids[0, 1] = 0, v - 1
     out = ort.InferenceSession(str(path)).run(None, {"ids": ids})[0]
     diff = float(np.abs(out - weight[torch.from_numpy(ids)].numpy()).max())
-    if diff > atol:
+    if not np.isfinite(diff) or diff > atol:
         raise RuntimeError(f"ONNX/PyTorch mismatch: max abs diff {diff} > {atol}")
     return diff
 
@@ -55,6 +55,8 @@ def load_onnx_embeddings(run_dir, chunk: int = 65536) -> tuple[list[str], np.nda
 
 
 def write_vec(path, words: list[str], matrix: np.ndarray) -> None:
+    if len(words) != matrix.shape[0]:
+        raise ValueError(f"{len(words)} words but {matrix.shape[0]} matrix rows")
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(f"{len(words)} {matrix.shape[1]}\n")
         for w, row in zip(words, matrix):

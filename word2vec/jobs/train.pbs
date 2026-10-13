@@ -16,7 +16,9 @@ NAME="${W2V_LANG}-${MODE}${SUFFIX}-d${DIM}-s${SEED}"  # mirrors w2v.train.run_na
 D="$SCRATCHDIR/data"
 mkdir -p "$D/$W2V_LANG" "$D/benchmarks" "$SCRATCHDIR/runs"
 
+STAGED=0
 copy_back() {
+    if [[ "$STAGED" != 1 ]]; then return 0; fi
     mkdir -p "$W2V_RUNS"
     rm -rf "$W2V_RUNS/.$NAME.tmp"
     if cp -r "$SCRATCHDIR/runs/$NAME" "$W2V_RUNS/.$NAME.tmp" \
@@ -31,10 +33,15 @@ trap copy_back EXIT
 cp "$W2V_DATA/$W2V_LANG"/{tokens.bin,vocab.json,stats.json} "$D/$W2V_LANG/"
 if [[ -d "$W2V_DATA/benchmarks/$W2V_LANG" ]]; then cp -r "$W2V_DATA/benchmarks/$W2V_LANG" "$D/benchmarks/"; fi
 if [[ -d "$W2V_RUNS/$NAME" ]]; then cp -r "$W2V_RUNS/$NAME" "$SCRATCHDIR/runs/"; fi
+STAGED=1
 
 nvidia-smi || true
-w2v_py -m w2v.train --lang "$W2V_LANG" --mode "$MODE" "${JEPA_FLAG[@]}" --dim "$DIM" --seed "$SEED" \
-    --epochs "${EPOCHS:-1}" --data-dir "$D" --run-dir "$SCRATCHDIR/runs/$NAME" &
-pid=$!
-trap 'kill -TERM "$pid" 2>/dev/null; wait "$pid"; exit 143' TERM
-wait "$pid"
+TRAIN_BUDGET=${TRAIN_BUDGET:-50m}
+rc=0
+timeout --signal=TERM --kill-after=2m "$TRAIN_BUDGET" "$UV_PROJECT_ENVIRONMENT/bin/python" -m w2v.train \
+    --lang "$W2V_LANG" --mode "$MODE" "${JEPA_FLAG[@]}" --dim "$DIM" --seed "$SEED" \
+    --epochs "${EPOCHS:-1}" --data-dir "$D" --run-dir "$SCRATCHDIR/runs/$NAME" || rc=$?
+if (( rc != 0 )); then
+    echo "training stopped (exit $rc): budget $TRAIN_BUDGET or error; resubmit the same job to resume from ckpt.pt" >&2
+    exit "$rc"
+fi

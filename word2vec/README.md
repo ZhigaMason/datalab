@@ -44,6 +44,7 @@ uv run --frozen --no-sync python -m scripts.compare --runs-dir "$W2V_RUNS" --out
 ```
 
 If an upstream job fails, its dependents stay held (`qstat -u $USER` shows them as H); `qdel` them and resubmit.
+A training job stops after `TRAIN_BUDGET` (default 50m) and resumes when resubmitted; `qsub -v ...,TRAIN_BUDGET=...` can change it alongside a longer walltime.
 Training jobs resume from `ckpt.pt` when resubmitted (same variables). English is capped
 to the larger of the Czech/Ukrainian token counts, so its vocab job waits for both.
 Czech/Ukrainian analogy benchmarks keep only semantic categories (lemmatization removes

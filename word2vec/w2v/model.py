@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from torch import nn
 
 from w2v.data import PAD_ID
+from w2v.losses import jepa_loss, ns_loss
 
 MODES = ("bidir", "causal")
 
@@ -52,3 +53,13 @@ class W2V(nn.Module):
     @torch.no_grad()
     def update_ema(self, tau: float) -> None:
         self.emb_ema.weight.lerp_(self.emb.weight, 1.0 - tau)
+
+    def loss(self, x, m, negatives=None, lambda_var: float = 1.0, lambda_cov: float = 0.04, n_vicreg: int = 2048):
+        """Returns (scalar loss, dict of detached parts). Loss positions: real target with >= 1 context token."""
+        ctx, has_ctx = self.context(x, m)
+        valid = m & has_ctx
+        if self.jepa:
+            with torch.no_grad():
+                tgt = self.emb_ema(x)
+            return jepa_loss(self.predictor(ctx), tgt, valid, lambda_var, lambda_cov, n_vicreg)
+        return ns_loss(ctx, x, valid, self.out.weight, negatives)

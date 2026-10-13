@@ -49,3 +49,6 @@ Training jobs resume from `ckpt.pt` when resubmitted (same variables). English i
 to the larger of the Czech/Ukrainian token counts, so its vocab job waits for both.
 Czech/Ukrainian analogy benchmarks keep only semantic categories (lemmatization removes
 the morphological ones); there is no Ukrainian similarity set.
+Analogy accuracy uses 3CosAdd over the full vocabulary (not the common top-30k restriction), so numbers are not
+directly comparable to published Google-analogy figures. After a resume, `metrics.jsonl` may contain repeated
+steps; keep the last record per step.

@@ -86,3 +86,19 @@ def test_build_vocab_cap_from_other_languages(tmp_path):
     assert Vocab.load(tmp_path / "en/vocab.json").words[2:] == ["a", "b", "c", "d"]
     encode.main(["--lang", "en", "--pad", "1", "--data-dir", str(tmp_path)])
     assert json.loads((tmp_path / "en/stats.json").read_text())["tokens"] == 4
+
+
+def test_stale_shards_beyond_num_shards_are_ignored(tmp_path):
+    _write_shards(tmp_path / "en/text", [["the cat"], ["the dog"]])
+    (tmp_path / "en/text/shard_0002.txt").write_text("stale words here\n")
+    build_vocab.main(["--lang", "en", "--num-shards", "2", "--min-count", "1", "--data-dir", str(tmp_path)])
+    assert json.loads((tmp_path / "en/stats.json").read_text())["num_shards"] == 2
+    assert not {"stale", "words", "here"} & set(Vocab.load(tmp_path / "en/vocab.json").words)
+    encode.main(["--lang", "en", "--pad", "1", "--data-dir", str(tmp_path)])
+    assert json.loads((tmp_path / "en/stats.json").read_text())["tokens"] == 4
+
+
+def test_iter_sentences_missing_numbered_shard_errors(tmp_path):
+    _write_shards(tmp_path, [["a b"]])
+    with pytest.raises(FileNotFoundError, match="shard_0001"):
+        list(iter_sentences(tmp_path, num_shards=2))

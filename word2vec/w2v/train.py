@@ -71,6 +71,7 @@ def parse_args(argv=None) -> argparse.Namespace:
     p.add_argument("--device", default="auto")
     p.add_argument("--compile", action=argparse.BooleanOptionalAction, default=None,
                    help="torch.compile the loss (default: on for CUDA)")
+    p.add_argument("--allow-no-benchmarks", action="store_true", help="train even if no benchmark files exist")
     p.add_argument("--write-vec", action="store_true", help="also write vectors.vec")
     return p.parse_args(argv)
 
@@ -87,7 +88,7 @@ def _prepare_run_dir(args, run_dir: Path, config: dict) -> None:
     cfg_path = run_dir / "config.json"
     if cfg_path.exists():
         old = json.loads(cfg_path.read_text())
-        diff = sorted(k for k in (*CONFIG_KEYS, "vocab_size", "total_steps") if old.get(k) != config.get(k))
+        diff = sorted(k for k in (*CONFIG_KEYS, "vocab_size", "total_steps", "data_stats") if old.get(k) != config.get(k))
         if diff:
             raise ValueError(f"run dir {run_dir} has a different config ({', '.join(diff)}); use another --run-dir")
     cfg_path.write_text(json.dumps(config, indent=2, ensure_ascii=False))
@@ -105,6 +106,12 @@ def train(args) -> Path:
     stream = TokenStream(lang_dir / "tokens.bin", args.seq_len, args.batch, args.seed)
     total = args.max_steps or max(1, int(stream.steps_per_epoch() * args.epochs))
     warmup = max(1, int(total * args.warmup_frac))
+
+    bench_dir = Path(args.data_dir) / "benchmarks" / args.lang
+    benchmarks = load_benchmarks(bench_dir)
+    if not (benchmarks["sim"] or benchmarks["analogy"]) and not args.allow_no_benchmarks:
+        raise FileNotFoundError(f"no benchmarks in {bench_dir}; run scripts.fetch_benchmarks "
+                                "(or pass --allow-no-benchmarks)")
 
     run_dir = Path(args.run_dir) if args.run_dir else Path(args.runs_dir) / run_name(
         args.lang, args.mode, args.jepa, args.dim, args.seed)
@@ -133,7 +140,6 @@ def train(args) -> Path:
         print(f"resumed {run_dir} at step {start}/{total}")
 
     loss_fn = torch.compile(model.loss) if use_compile else model.loss
-    benchmarks = load_benchmarks(Path(args.data_dir) / "benchmarks" / args.lang)
     writer = SummaryWriter(str(run_dir / "tb"))
     end = total if args.stop_after is None else min(total, start + args.stop_after)
     t0, tokens_seen = time.time(), 0
@@ -171,11 +177,11 @@ def train(args) -> Path:
                           "tokens_per_s": tokens_seen / max(time.time() - t0, 1e-9)}
                 record.update({k: v.item() for k, v in parts.items()})
                 with torch.no_grad():
-                    flat = x.flatten()[m.flatten()][:4096]
-                    record["emb_std"] = normalized_std(model.emb(flat)).item()
+                    ctx, has = model.context(x, m)
+                    sel = m & has
+                    record["emb_std"] = normalized_std(model.emb(x[sel][:4096])).item()
                     if args.jepa:
-                        ctx, _ = model.context(x, m)
-                        record["pred_std"] = normalized_std(model.predictor(ctx.flatten(0, 1)[:4096])).item()
+                        record["pred_std"] = normalized_std(model.predictor(ctx[sel][:4096])).item()
                 if args.jepa and done > warmup:
                     now_collapsed = min(record["emb_std"], record["pred_std"]) < COLLAPSE_STD
                     if now_collapsed and not collapse:

@@ -34,13 +34,13 @@ def main(argv=None):
     cap = max((json.loads(Path(f).read_text())["tokens_counted"] for f in a.cap_from), default=None)
     counter: Counter = Counter()
     total = 0
-    for sent in iter_sentences(text_dir, cap):
+    for sent in iter_sentences(text_dir, cap, a.num_shards):
         counter.update(sent)
         total += len(sent)
     vocab = Vocab.build(counter, a.max_vocab, a.min_count)
     vocab.save(lang_dir / "vocab.json")
     stats = {"tokens_counted": total, "cap": cap, "vocab_size": len(vocab),
-             "min_count": a.min_count, "max_vocab": a.max_vocab}
+             "num_shards": a.num_shards, "min_count": a.min_count, "max_vocab": a.max_vocab}
     (lang_dir / "stats.json").write_text(json.dumps(stats, indent=2))
     print(json.dumps(stats))
 

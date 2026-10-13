@@ -27,7 +27,7 @@ def main(argv=None):
     stats = json.loads(stats_path.read_text())
     vocab = Vocab.load(lang_dir / "vocab.json")
     tmp = lang_dir / "tokens.bin.part"
-    stats.update(encode_corpus(lang_dir / "text", vocab, tmp, a.pad, stats.get("cap")))
+    stats.update(encode_corpus(lang_dir / "text", vocab, tmp, a.pad, stats.get("cap"), stats.get("num_shards")))
     tmp.replace(lang_dir / "tokens.bin")
     stats_path.write_text(json.dumps(stats, indent=2))
     print(json.dumps(stats))

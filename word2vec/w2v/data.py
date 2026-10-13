@@ -42,9 +42,17 @@ class Vocab:
         return cls(SPECIALS + [w for w, _ in items], [0] * len(SPECIALS) + [c for _, c in items])
 
 
-def iter_sentences(text_dir, max_tokens: int | None = None) -> Iterator[list[str]]:
-    """Sentences from shard files in sorted order; stops once max_tokens have been yielded."""
-    files = sorted(Path(text_dir).glob("shard_*.txt"))
+def iter_sentences(text_dir, max_tokens: int | None = None, num_shards: int | None = None) -> Iterator[list[str]]:
+    """Sentences from shard files in sorted order; stops once max_tokens have been yielded.
+
+    With num_shards, reads exactly shard_0000..shard_{num_shards-1} (ignoring stale extra shards)."""
+    if num_shards is not None:
+        files = [Path(text_dir) / f"shard_{i:04d}.txt" for i in range(num_shards)]
+        for f in files:
+            if not f.exists():
+                raise FileNotFoundError(f"{f} missing; run scripts.preprocess first")
+    else:
+        files = sorted(Path(text_dir).glob("shard_*.txt"))
     if not files:
         raise FileNotFoundError(f"no shard_*.txt in {text_dir}; run scripts.preprocess first")
     total = 0
@@ -60,12 +68,13 @@ def iter_sentences(text_dir, max_tokens: int | None = None) -> Iterator[list[str
                     return
 
 
-def encode_corpus(text_dir, vocab: Vocab, out_path, pad: int, max_tokens: int | None = None) -> dict:
+def encode_corpus(text_dir, vocab: Vocab, out_path, pad: int, max_tokens: int | None = None,
+                  num_shards: int | None = None) -> dict:
     """Flat uint32 stream: `pad` PADs, then each sentence followed by `pad` PADs. OOV words are dropped."""
     n_tokens = n_sent = length = 0
     buf: list[int] = [PAD_ID] * pad
     with open(out_path, "wb") as fh:
-        for sent in iter_sentences(text_dir, max_tokens):
+        for sent in iter_sentences(text_dir, max_tokens, num_shards):
             ids = [vocab.index[w] for w in sent if w in vocab.index]
             if not ids:
                 continue

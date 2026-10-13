@@ -82,3 +82,27 @@ def test_jepa_resume_matches_uninterrupted_run(tiny_data):
     b = torch.load(interrupted / "ckpt.pt", weights_only=False)["model"]
     for k in ("emb.weight", "emb_ema.weight", "predictor.weight"):
         torch.testing.assert_close(a[k], b[k])
+
+
+def test_resume_refuses_re_encoded_corpus(tiny_data):
+    run_dir = str(tiny_data / "runs/x")
+    train(_args(tiny_data, "--run-dir", run_dir, "--stop-after", "1"))
+    p = tiny_data / "data/en/stats.json"
+    stats = json.loads(p.read_text())
+    stats["sentences"] += 1
+    p.write_text(json.dumps(stats))
+    with pytest.raises(ValueError, match="different config"):
+        train(_args(tiny_data, "--run-dir", run_dir))
+
+
+def test_missing_benchmarks_fail_fast(tiny_data):
+    import shutil
+
+    shutil.rmtree(tiny_data / "data/benchmarks")
+    run_dir = tiny_data / "runs/nb"
+    with pytest.raises(FileNotFoundError, match="fetch_benchmarks"), pytest.warns(UserWarning):
+        train(_args(tiny_data, "--run-dir", str(run_dir)))
+    assert not (run_dir / "config.json").exists()
+    with pytest.warns(UserWarning):
+        out = train(_args(tiny_data, "--run-dir", str(run_dir), "--allow-no-benchmarks"))
+    assert (out / "model.onnx").exists()

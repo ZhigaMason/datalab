@@ -21,11 +21,14 @@ class EmbeddingLookup(nn.Module):
 
 def export_onnx(weight: torch.Tensor, path) -> Path:
     path = Path(path)
+    if weight.numel() * 4 >= 2**31:
+        raise ValueError(f"embedding matrix of {weight.numel()} float32 values reaches the 2 GB protobuf limit; "
+                         "a single-file ONNX artifact is not possible")
     model = EmbeddingLookup(weight.detach().float().cpu()).eval()
     example = torch.zeros((2, 3), dtype=torch.long)
     dims = {0: torch.export.Dim("batch"), 1: torch.export.Dim("seq")}
     torch.onnx.export(model, (example,), str(path), input_names=["ids"], output_names=["embeddings"],
-                      dynamic_shapes={"ids": dims}, dynamo=True)
+                      dynamic_shapes={"ids": dims}, dynamo=True, external_data=False)
     return path
 
 

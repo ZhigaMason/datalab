@@ -52,3 +52,30 @@ def test_verify_onnx_fails_on_nan_weights(tmp_path):
 def test_write_vec_rejects_length_mismatch(tmp_path):
     with pytest.raises(ValueError):
         write_vec(tmp_path / "v.vec", ["a", "b", "c"], np.zeros((2, 4), dtype=np.float32))
+
+
+def test_export_is_single_self_contained_file(tmp_path):
+    import shutil
+
+    w = torch.randn(30, 5)
+    src = tmp_path / "src"
+    src.mkdir()
+    export_onnx(w, src / "model.onnx")
+    assert list(src.glob("*.data")) == [] and [p.name for p in src.iterdir()] == ["model.onnx"]
+    dst = tmp_path / "elsewhere"
+    dst.mkdir()
+    shutil.copy(src / "model.onnx", dst / "model.onnx")
+    out = ort.InferenceSession(str(dst / "model.onnx")).run(None, {"ids": np.array([[3, 29]], dtype=np.int64)})[0]
+    np.testing.assert_allclose(out[0, 1], w[29].numpy(), atol=1e-6)
+
+
+def test_export_rejects_weights_over_protobuf_limit(tmp_path):
+    class Huge:
+        def numel(self):
+            return 2**29
+
+        def detach(self):
+            return self
+
+    with pytest.raises(ValueError, match="2 GB"):
+        export_onnx(Huge(), tmp_path / "m.onnx")

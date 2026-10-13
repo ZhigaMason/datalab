@@ -69,17 +69,20 @@ Single module `W2V(V, dim, k, mode ∈ {bidir, causal}, jepa: bool)`.
 ### Shared context encoder (fixed convolutional averaging)
 
 - `E = nn.Embedding(V, dim, padding_idx=0)`, init `U(−0.5/dim, 0.5/dim)`.
-- Non-trainable kernel buffer of length `2k+1`:
-  - bidir: `[1]*k + [0] + [1]*k`
-  - causal: `[1]*k + [0] + [0]*k` (position t sees only t−k … t−1)
+- Non-trainable normalized kernel buffer of length `2k+1`:
+  - bidir: `([1]*k + [0] + [1]*k) / 2k`
+  - causal: `([1]*k + [0] + [0]*k) / k` (position t sees only t−k … t−1)
 - With mask `m` (1 = real, not pad, not subsampled):
   ```
-  ctx_sum = conv1d((E(x) * m).transpose(1,2), kernel.expand(dim,1,-1), padding=k, groups=dim)
-  Z       = conv1d(m, kernel, padding=k)
-  ctx     = ctx_sum / Z.clamp(min=1)
+  ctx = conv1d((E(x) * m).transpose(1,2), kernel.expand(dim,1,-1), padding=k, groups=dim)
   ```
-  i.e. CBOW averaging with normalizer `Z` = number of valid context tokens.
-- Loss positions: `m[t] == 1` and `Z[t] > 0`.
+- The normalizer is fixed (closed form), not the count of valid context tokens.
+  Deliberate departure from CBOW: near sentence boundaries and where subsampling
+  masked words, `ctx` is scaled down rather than renormalized.
+- Loss positions: `m[t] == 1` (target is a real, non-subsampled token) **and** the
+  position has at least one valid context token, computed as
+  `conv1d(m, (kernel > 0).float(), padding=k) > 0`. Masked targets (incl. sentence
+  `<pad>`s) and context-less positions contribute nothing to the loss.
 
 ### Non-JEPA variants (negative sampling)
 
@@ -149,9 +152,11 @@ For all variants the exported table is the context encoder `E`.
 
 ### Testing (local CPU, pytest)
 
-- Conv averaging matches a naive Python window loop (both kernels, edges, masks).
+- Conv averaging matches a naive Python loop computing the closed-form
+  (fixed-normalizer) window sum (both kernels, edges, masks).
 - Causal leakage: perturbing tokens ≥ t does not change `ctx_t`.
-- `Z` / mask handling at chunk edges and sentence pads.
+- Loss-position mask: masked targets and context-less positions (chunk edges,
+  sentence pads) are excluded.
 - Negative-sampling loss matches a hand-computed reference.
 - EMA update correctness and no gradient into `E_ema`.
 - ONNX export parity.
@@ -160,12 +165,18 @@ For all variants the exported table is the context encoder `E`.
 
 ## 4. MetaCentrum execution
 
-- Environment: NGC PyTorch Singularity image from
-  `/cvmfs/singularity.metacentrum.cz/NGC/`; extra packages
-  (`ufal.udpipe`, `onnx`, `onnxruntime`, `datasets`, `tensorboard`) installed once
-  into a `PYTHONUSERBASE` on storage by `jobs/setup_env.sh`.
+- Environment: managed by **uv** from `pyproject.toml` + committed `uv.lock`; no
+  container. `torch` comes from PyPI (Linux wheels bundle CUDA), so the same lock
+  works on the local CPU machine and on MetaCentrum GPU nodes.
+  - Core deps: `torch`, `numpy`, `onnx`, `onnxruntime`, `tensorboard`.
+  - Optional extra `prep`: `ufal.udpipe`, `datasets`, `pyarrow` (CPU prep jobs only).
+  - Dependency group `dev`: `pytest`.
+- `jobs/setup_env.sh` (run once on a frontend): installs uv into the storage home
+  if missing, sets `UV_CACHE_DIR` on storage, and runs `uv sync --frozen --extra prep`
+  creating `.venv` on storage.
+- PBS jobs invoke `uv run --frozen python -m …` (or the module/script directly).
 - `jobs/config.sh` — the only user-edited file: storage root
-  (e.g. `/storage/brno2/home/$USER/w2v`), image path, defaults.
+  (e.g. `/storage/brno2/home/$USER/w2v`), uv cache location, defaults.
 - Jobs:
   - `prep.pbs` — CPU array job, one index per (lang, shard): download + preprocess.
   - `vocab.pbs` — CPU, one per lang: build vocab + encode.
@@ -182,12 +193,12 @@ For all variants the exported table is the context encoder `E`.
 
 ```
 word2vec/
-  w2v/        data.py, model.py, losses.py, train.py, export.py, evaluate.py
-  scripts/    download.py, preprocess.py, build_vocab.py, encode.py,
-              fetch_benchmarks.py, compare.py
-  jobs/       config.sh, setup_env.sh, prep.pbs, vocab.pbs, train.pbs, submit_all.sh
-  tests/      unit tests + tiny end-to-end smoke test
-  requirements.txt
+  w2v/              data.py, model.py, losses.py, train.py, export.py, evaluate.py
+  scripts/          download.py, preprocess.py, build_vocab.py, encode.py,
+                    fetch_benchmarks.py, compare.py
+  jobs/             config.sh, setup_env.sh, prep.pbs, vocab.pbs, train.pbs, submit_all.sh
+  tests/            unit tests + tiny end-to-end smoke test
+  pyproject.toml    managed by uv
   README.md
 ```
 
@@ -195,5 +206,5 @@ word2vec/
 
 - Availability/licensing of Czech and Ukrainian word-similarity datasets.
 - Exact UDPipe 1 UD 2.x model filenames/download URL.
-- Latest NGC PyTorch image name on MetaCentrum CVMFS.
+- PyPI `torch` CUDA wheel compatibility with MetaCentrum GPU node drivers.
 - Actual per-language token counts after preprocessing (sets the English cap).

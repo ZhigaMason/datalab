@@ -7,3 +7,4 @@ runs/
 results/
 runs-tiny/
 .pytest_cache/
+w2v-*.o*

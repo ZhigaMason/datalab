@@ -1,5 +1,6 @@
 #!/bin/bash
 #PBS -N w2v-prep
+#PBS -j oe
 #PBS -l select=1:ncpus=8:mem=16gb
 #PBS -l walltime=8:00:00
 set -euo pipefail

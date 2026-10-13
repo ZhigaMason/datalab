@@ -45,6 +45,11 @@ for L in $LANGS; do
         [[ "$V" == *-jepa ]] && JEPA=1
         for D in $DIMS; do
             for S in $SEEDS; do
+                NAME="${L}-${MODE}$([[ $JEPA == 1 ]] && echo -jepa)-d${D}-s${S}"  # mirrors train.pbs
+                if [[ -f "$W2V_RUNS/$NAME/final_metrics.json" ]]; then
+                    echo "skip $NAME: finished"
+                    continue
+                fi
                 id=$(qsub "${DEP[@]}" -N "w2v-$L-$V-d$D-s$S" \
                     -v W2V_LANG="$L",MODE="$MODE",JEPA="$JEPA",DIM="$D",SEED="$S",EPOCHS="$EPOCHS" jobs/train.pbs)
                 echo "train $L $V d$D s$S: $id"

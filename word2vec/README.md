@@ -35,7 +35,7 @@ uv run python -m w2v.train --lang cs --mode causal --jepa --dim 64 --batch 8 --s
 ```bash
 # on a frontend, inside your storage home (default /storage/brno12-cerit/home/$USER/w2v)
 git clone <this repo> "$W2V_STORAGE/datalab" && cd "$W2V_STORAGE/datalab/word2vec"
-$EDITOR jobs/config.sh             # set W2V_STORAGE (and W2V_CODE if cloned elsewhere)
+$EDITOR jobs/config.sh             # set W2V_STORAGE
 jobs/setup_env.sh                  # once: uv + locked environment on storage
 jobs/submit_all.sh                 # download -> preprocess (array) -> vocab/encode -> 12 training jobs
 DIMS="100 300 500" SKIP_PREP=1 jobs/submit_all.sh   # more sizes once data exists
@@ -43,6 +43,7 @@ qstat -u "$USER"
 uv run --frozen --no-sync python -m scripts.compare --runs-dir "$W2V_RUNS" --out "$W2V_STORAGE/results"
 ```
 
+If an upstream job fails, its dependents stay held (`qstat -u $USER` shows them as H); `qdel` them and resubmit.
 Training jobs resume from `ckpt.pt` when resubmitted (same variables). English is capped
 to the larger of the Czech/Ukrainian token counts, so its vocab job waits for both.
 Czech/Ukrainian analogy benchmarks keep only semantic categories (lemmatization removes

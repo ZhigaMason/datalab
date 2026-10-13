@@ -7,7 +7,7 @@ Articles are assigned to shards round-robin (article index % num_shards).
 from __future__ import annotations
 
 import argparse
-from multiprocessing import Pool
+from multiprocessing import get_context
 from pathlib import Path
 from typing import Iterator
 
@@ -80,7 +80,7 @@ def main(argv=None):
 
     tmp = out.with_suffix(".part")
     n_articles = n_sentences = 0
-    with Pool(a.workers, initializer=_init_worker, initargs=(a.lang, str(model_path) if model_path else None)) as pool, \
+    with get_context("spawn").Pool(a.workers, initializer=_init_worker, initargs=(a.lang, str(model_path) if model_path else None)) as pool, \
             open(tmp, "w", encoding="utf-8") as fo:
         for lines in pool.imap(_work, all_texts(), chunksize=16):
             n_articles += 1

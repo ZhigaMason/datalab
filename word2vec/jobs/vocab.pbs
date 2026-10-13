@@ -1,0 +1,14 @@
+#!/bin/bash
+#PBS -N w2v-vocab
+#PBS -l select=1:ncpus=2:mem=48gb
+#PBS -l walltime=8:00:00
+set -euo pipefail
+cd "$PBS_O_WORKDIR"
+source jobs/config.sh
+: "${W2V_LANG:?set W2V_LANG}" "${NUM_SHARDS:?set NUM_SHARDS}"
+CAP=()
+if [[ "$W2V_LANG" == en ]]; then
+    CAP=(--cap-from "$W2V_DATA/cs/stats.json" "$W2V_DATA/uk/stats.json")
+fi
+w2v_py -m scripts.build_vocab --lang "$W2V_LANG" --num-shards "$NUM_SHARDS" --data-dir "$W2V_DATA" "${CAP[@]}"
+w2v_py -m scripts.encode --lang "$W2V_LANG" --pad 5 --data-dir "$W2V_DATA"

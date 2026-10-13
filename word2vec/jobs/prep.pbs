@@ -1,0 +1,10 @@
+#!/bin/bash
+#PBS -N w2v-prep
+#PBS -l select=1:ncpus=8:mem=16gb
+#PBS -l walltime=8:00:00
+set -euo pipefail
+cd "$PBS_O_WORKDIR"
+source jobs/config.sh
+: "${W2V_LANG:?set W2V_LANG}" "${NUM_SHARDS:?set NUM_SHARDS}" "${PBS_ARRAY_INDEX:?submit as an array job (-J)}"
+w2v_py -m scripts.preprocess --lang "$W2V_LANG" --shard "$PBS_ARRAY_INDEX" --num-shards "$NUM_SHARDS" \
+    --workers "${PBS_NCPUS:-8}" --data-dir "$W2V_DATA"

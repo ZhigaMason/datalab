@@ -1,0 +1,34 @@
+#!/bin/bash
+#PBS -N w2v-train
+#PBS -q gpu
+#PBS -l select=1:ncpus=4:ngpus=1:gpu_mem=20gb:mem=32gb:scratch_local=40gb
+#PBS -l walltime=4:00:00
+set -euo pipefail
+cd "$PBS_O_WORKDIR"
+source jobs/config.sh
+: "${W2V_LANG:?}" "${MODE:?}" "${DIM:?}" "${SEED:?}"
+JEPA_FLAG=()
+SUFFIX=""
+if [[ "${JEPA:-0}" == 1 ]]; then JEPA_FLAG=(--jepa); SUFFIX="-jepa"; fi
+NAME="${W2V_LANG}-${MODE}${SUFFIX}-d${DIM}-s${SEED}"  # mirrors w2v.train.run_name
+
+D="$SCRATCHDIR/data"
+mkdir -p "$D/$W2V_LANG" "$D/benchmarks" "$SCRATCHDIR/runs"
+cp "$W2V_DATA/$W2V_LANG"/{tokens.bin,vocab.json,stats.json} "$D/$W2V_LANG/"
+if [[ -d "$W2V_DATA/benchmarks/$W2V_LANG" ]]; then cp -r "$W2V_DATA/benchmarks/$W2V_LANG" "$D/benchmarks/"; fi
+if [[ -d "$W2V_RUNS/$NAME" ]]; then cp -r "$W2V_RUNS/$NAME" "$SCRATCHDIR/runs/"; fi
+
+copy_back() {
+    mkdir -p "$W2V_RUNS"
+    if cp -r "$SCRATCHDIR/runs/$NAME" "$W2V_RUNS/"; then
+        clean_scratch || true
+    else
+        echo "copy back failed; results remain in $SCRATCHDIR on $(hostname)" >&2
+    fi
+}
+trap copy_back EXIT
+trap 'exit 143' TERM
+
+nvidia-smi || true
+w2v_py -m w2v.train --lang "$W2V_LANG" --mode "$MODE" "${JEPA_FLAG[@]}" --dim "$DIM" --seed "$SEED" \
+    --epochs "${EPOCHS:-1}" --data-dir "$D" --run-dir "$SCRATCHDIR/runs/$NAME"

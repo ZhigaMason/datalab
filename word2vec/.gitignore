@@ -5,3 +5,5 @@ data/
 data-tiny/
 runs/
 results/
+runs-tiny/
+.pytest_cache/

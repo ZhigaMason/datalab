@@ -12,5 +12,5 @@ export PATH="$W2V_STORAGE/.local/bin:$PATH"
 # Preprocessing array size per language (one PBS subjob per shard).
 declare -A W2V_SHARDS=([en]=64 [cs]=16 [uk]=32)
 
-# Run project Python without re-syncing the shared environment.
-w2v_py() { uv run --frozen --no-sync python "$@"; }
+# Run the project Python from the synced environment (jobs need no uv on PATH).
+w2v_py() { "$UV_PROJECT_ENVIRONMENT/bin/python" "$@"; }

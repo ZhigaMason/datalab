@@ -166,8 +166,9 @@ For all variants the exported table is the context encoder `E`.
 ## 4. MetaCentrum execution
 
 - Environment: managed by **uv** from `pyproject.toml` + committed `uv.lock`; no
-  container. `torch` comes from PyPI (Linux wheels bundle CUDA), so the same lock
-  works on the local CPU machine and on MetaCentrum GPU nodes.
+  container. `torch` is pinned to the PyTorch **cu126** wheel index (PyPI's Linux
+  wheels target CUDA 13 and need driver ≥ 580; cu126 runs on older MetaCentrum
+  drivers). The same lock works on the local CPU machine and on GPU nodes.
   - Core deps: `torch`, `numpy`, `onnx`, `onnxruntime`, `tensorboard`.
   - Optional extra `prep`: `ufal.udpipe`, `datasets`, `pyarrow` (CPU prep jobs only).
   - Dependency group `dev`: `pytest`.
@@ -178,7 +179,8 @@ For all variants the exported table is the context encoder `E`.
 - `jobs/config.sh` — the only user-edited file: storage root
   (e.g. `/storage/brno2/home/$USER/w2v`), uv cache location, defaults.
 - Jobs:
-  - `prep.pbs` — CPU array job, one index per (lang, shard): download + preprocess.
+  - `download.pbs` — CPU, one per lang: Wikipedia parquet + UDPipe model + benchmarks.
+  - `prep.pbs` — CPU array job, one index per shard of a language: preprocess.
   - `vocab.pbs` — CPU, one per lang: build vocab + encode.
   - `train.pbs` — 1 GPU (`gpu_mem≥20gb`), ~4 h walltime; stages `tokens.bin` and
     vocab to `$SCRATCHDIR`, runs training with env vars LANG/MODE/JEPA/DIM/SEED,
@@ -204,7 +206,9 @@ word2vec/
 
 ## Open items to verify during implementation
 
-- Availability/licensing of Czech and Ukrainian word-similarity datasets.
-- Exact UDPipe 1 UD 2.x model filenames/download URL.
-- PyPI `torch` CUDA wheel compatibility with MetaCentrum GPU node drivers.
+- Resolved 2026-10-13: Czech similarity = WordSim353-cs (LINDAT 11234/1-1713);
+  no Ukrainian similarity set found, so uk is evaluated on analogies only. UDPipe
+  models = UD 2.5 `czech-pdt-ud-2.5-191206`, `ukrainian-iu-ud-2.5-191206`
+  (LINDAT 11234/1-3131, new DSpace bitstream URLs).
+- cu126 `torch` wheel compatibility with MetaCentrum GPU node drivers (check `nvidia-smi` in the first train job).
 - Actual per-language token counts after preprocessing (sets the English cap).

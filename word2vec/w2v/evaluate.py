@@ -30,6 +30,7 @@ def load_benchmarks(bench_dir) -> dict:
     return out
 
 
+@torch.no_grad()
 def eval_similarity(pairs, index, matrix: torch.Tensor) -> dict:
     kept = [(index[a], index[b], s) for a, b, s in pairs if a in index and b in index]
     coverage = len(kept) / len(pairs) if pairs else 0.0

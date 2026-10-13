@@ -49,3 +49,10 @@ def test_load_benchmarks_and_evaluate_all(tmp_path):
 def test_load_benchmarks_missing_dir_warns(tmp_path):
     with pytest.warns(UserWarning, match="benchmarks"):
         assert load_benchmarks(tmp_path / "none") == {"sim": {}, "analogy": {}}
+
+
+def test_eval_similarity_accepts_matrix_requiring_grad():
+    index = {"a": 0, "b": 1, "c": 2}
+    m = torch.tensor([[1.0, 0.0], [1.0, 0.1], [0.0, 1.0]]).requires_grad_(True)
+    r = eval_similarity([("a", "b", 10.0), ("a", "c", 1.0), ("b", "c", 2.0)], index, m)
+    assert r["spearman"] == pytest.approx(1.0)

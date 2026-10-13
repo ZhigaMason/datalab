@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Iterator
 
 import numpy as np
+import torch
 
 PAD_ID, UNK_ID = 0, 1
 SPECIALS = ["<pad>", "<unk>"]
@@ -79,3 +80,43 @@ def encode_corpus(text_dir, vocab: Vocab, out_path, pad: int, max_tokens: int | 
         np.asarray(buf, dtype=np.uint32).tofile(fh)
         length += len(buf)
     return {"tokens": n_tokens, "length": length, "pad": pad, "sentences": n_sent}
+
+
+class TokenStream:
+    """Random contiguous chunks of a uint32 token memmap; batch(step) is deterministic in (seed, step)."""
+
+    def __init__(self, path, seq_len: int, batch_size: int, seed: int):
+        self.tokens = np.memmap(path, dtype=np.uint32, mode="r")
+        self.num_tokens = len(self.tokens)
+        if self.num_tokens < seq_len:
+            raise ValueError(f"corpus {path} has {self.num_tokens} tokens, fewer than seq_len={seq_len}")
+        self.seq_len, self.batch_size, self.seed = seq_len, batch_size, seed
+        self._offsets = np.arange(seq_len)
+
+    def steps_per_epoch(self) -> int:
+        return max(1, self.num_tokens // (self.batch_size * self.seq_len))
+
+    def batch(self, step: int) -> torch.Tensor:
+        rng = np.random.default_rng([self.seed, step])
+        starts = rng.integers(0, self.num_tokens - self.seq_len + 1, size=self.batch_size)
+        return torch.from_numpy(self.tokens[starts[:, None] + self._offsets].astype(np.int64))
+
+
+def keep_probs(counts, t: float) -> torch.Tensor:
+    """word2vec frequent-word subsampling: keep with prob min(1, sqrt(t / f)); 0 for unseen ids."""
+    c = torch.tensor(counts, dtype=torch.float64)
+    seen = c > 0
+    if t <= 0:
+        return seen.float()
+    f = c / c.sum()
+    p = torch.sqrt(t / f.clamp(min=1e-30)).clamp(max=1.0)
+    return torch.where(seen, p, torch.zeros_like(p)).float()
+
+
+def sample_mask(x: torch.Tensor, keep: torch.Tensor, generator: torch.Generator | None = None) -> torch.Tensor:
+    return torch.rand(x.shape, device=x.device, generator=generator) < keep[x]
+
+
+def noise_dist(counts, power: float = 0.75) -> torch.Tensor:
+    q = torch.tensor(counts, dtype=torch.float64).pow(power)
+    return (q / q.sum()).float()

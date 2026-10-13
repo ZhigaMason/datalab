@@ -80,5 +80,5 @@ def test_jepa_resume_matches_uninterrupted_run(tiny_data):
     train(_args(tiny_data, "--run-dir", str(interrupted), jepa=True))
     a = torch.load(straight / "ckpt.pt", weights_only=False)["model"]
     b = torch.load(interrupted / "ckpt.pt", weights_only=False)["model"]
-    for k in ("emb.weight", "emb_ema.weight", "predictor.weight", "predictor.bias"):
+    for k in ("emb.weight", "emb_ema.weight", "predictor.weight"):
         torch.testing.assert_close(a[k], b[k])

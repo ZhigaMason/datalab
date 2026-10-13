@@ -34,8 +34,7 @@ class W2V(nn.Module):
         self.register_buffer("kernel", kernel, persistent=False)
         self.register_buffer("support", (kernel > 0).float(), persistent=False)
         if jepa:
-            self.predictor = nn.Linear(dim, dim)
-            nn.init.zeros_(self.predictor.bias)
+            self.predictor = nn.Linear(dim, dim, bias=False)
             self.emb_ema = nn.Embedding(vocab_size, dim, padding_idx=PAD_ID)
             self.emb_ema.weight.data.copy_(self.emb.weight.data)
             self.emb_ema.weight.requires_grad_(False)

@@ -95,6 +95,6 @@ def test_non_jepa_out_is_zero_initialized():
     assert model.emb.weight.abs().max() <= 0.5 / 8
 
 
-def test_jepa_predictor_bias_is_zero_initialized():
+def test_jepa_predictor_has_no_bias():
     model = W2V(30, 8, 3, "bidir", True)
-    assert torch.count_nonzero(model.predictor.bias) == 0
+    assert model.predictor.bias is None

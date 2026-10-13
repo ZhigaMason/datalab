@@ -10,7 +10,10 @@ export HF_HOME="$W2V_STORAGE/.hf"
 export PATH="$W2V_STORAGE/.local/bin:$PATH"
 
 # Preprocessing array size per language (one PBS subjob per shard).
-declare -A W2V_SHARDS=([en]=64 [cs]=16 [uk]=32)
+declare -A W2V_SHARDS=([en]=16 [cs]=16 [uk]=32)
+# Parquet files downloaded per language (evenly spaced; 0 = all). English is capped to max(cs, uk) tokens
+# (~340M), which 8 of its 41 files (~73M tokens each) cover with margin.
+declare -A W2V_MAX_FILES=([en]=8 [cs]=0 [uk]=0)
 
 # Run the project Python from the synced environment (jobs need no uv on PATH).
 w2v_py() { "$UV_PROJECT_ENVIRONMENT/bin/python" "$@"; }

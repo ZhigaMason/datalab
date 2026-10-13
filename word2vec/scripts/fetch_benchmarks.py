@@ -1,6 +1,6 @@
 """Download word-similarity / analogy benchmarks and normalize them like the corpus.
 
-en: lowercased word forms. cs/uk: lemmatized with the same UDPipe model as the corpus;
+en: lowercased word forms. cs/uk: lemmatized with the same lemmatizer as the corpus (w2v.textproc.make_lemmatizer);
 only semantic analogy categories are kept (lemmatization erases morphological ones).
 
     python -m scripts.fetch_benchmarks --lang cs --data-dir data
@@ -17,7 +17,7 @@ import zipfile
 from functools import lru_cache
 from pathlib import Path
 
-from w2v.textproc import UDPIPE_MODELS, UdpipeLemmatizer, normalize_token
+from w2v.textproc import UDPIPE_MODELS, make_lemmatizer, normalize_token
 
 VECTO = "https://raw.githubusercontent.com/vecto-ai/word-benchmarks/master/word-similarity/monolingual/en"
 GOOGLE = "https://raw.githubusercontent.com/tmikolov/word2vec/master/questions-words.txt"
@@ -108,7 +108,7 @@ def main(argv=None):
         items = parse_analogy_txt(fetch(GOOGLE, raw / "questions-words.txt").decode())
         write_benchmark(out_dir, "analogy_google", normalize_analogies(items, norm), len(items), manifest)
     else:
-        lemmatizer = UdpipeLemmatizer(data_dir / "models" / UDPIPE_MODELS[a.lang][0])
+        lemmatizer = make_lemmatizer(a.lang, data_dir / "models" / UDPIPE_MODELS[a.lang][0])
         norm = lru_cache(maxsize=None)(lemmatizer.lemma)
         if a.lang == "cs":
             items = parse_analogy_txt(fetch(CZ_ANALOGY, raw / "czech_emb_corpus_no_phrase.txt").decode(), CS_SEMANTIC)

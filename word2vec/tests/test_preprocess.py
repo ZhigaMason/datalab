@@ -6,22 +6,32 @@ from scripts import download
 from scripts.preprocess import iter_shard_texts, main
 
 
-def _write_raw(data_dir, lang, texts, files=2):
+def _write_raw(data_dir, lang, texts, files=2, row_group_size=None):
     raw = data_dir / "raw" / f"20231101.{lang}"
     raw.mkdir(parents=True)
     per = -(-len(texts) // files)
     for f in range(files):
         chunk = texts[f * per:(f + 1) * per]
-        pq.write_table(pa.table({"text": chunk}), raw / f"train-{f:05d}.parquet")
+        pq.write_table(pa.table({"text": chunk}), raw / f"train-{f:05d}.parquet", row_group_size=row_group_size)
     return raw
 
 
-def test_iter_shard_texts_round_robin(tmp_path):
-    texts = [f"article {i}" for i in range(10)]
-    raw = _write_raw(tmp_path, "en", texts)
-    shards = [list(iter_shard_texts(raw, s, 3)) for s in range(3)]
-    assert shards[0] == ["article 0", "article 3", "article 6", "article 9"]
+def test_iter_shard_texts_assigns_row_groups_round_robin(tmp_path):
+    texts = [f"article {i}" for i in range(12)]
+    raw = _write_raw(tmp_path, "en", texts, files=2, row_group_size=2)  # 6 row groups: 3 per file
+    shards = [list(iter_shard_texts(raw, s, 4)) for s in range(4)]
+    assert shards[0] == ["article 0", "article 1", "article 8", "article 9"]  # row groups 0 and 4
+    assert shards[3] == ["article 6", "article 7"]  # row group 3 = first group of the second file
     assert sorted(sum(shards, [])) == sorted(texts)
+
+
+def test_iter_shard_texts_reads_only_its_row_groups(tmp_path, monkeypatch):
+    raw = _write_raw(tmp_path, "en", [f"a{i}" for i in range(8)], files=1, row_group_size=2)
+    read = []
+    orig = pq.ParquetFile.read_row_group
+    monkeypatch.setattr(pq.ParquetFile, "read_row_group", lambda self, i, **kw: read.append(i) or orig(self, i, **kw))
+    assert list(iter_shard_texts(raw, 1, 2)) == ["a2", "a3", "a6", "a7"]
+    assert read == [1, 3]
 
 
 def test_iter_shard_texts_missing_dir_errors(tmp_path):
@@ -73,3 +83,12 @@ def test_download_model_rejects_html_response(tmp_path, monkeypatch):
 def test_download_model_noop_for_english(tmp_path):
     download.download_model("en", tmp_path)
     assert not (tmp_path / "models").exists()
+
+
+def test_select_files_evenly_spaced():
+    files = [f"train-{i:05d}-of-00041.parquet" for i in range(41)]
+    picked = download.select_files(files, 8)
+    assert [int(f[6:11]) for f in picked] == [0, 6, 11, 17, 23, 29, 34, 40]
+    assert download.select_files(files, 0) == files
+    assert download.select_files(files, 100) == files
+    assert download.select_files(files, 1) == files[:1]

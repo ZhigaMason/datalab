@@ -1,11 +1,11 @@
 #!/bin/bash
 #PBS -N w2v-download
 #PBS -j oe
-#PBS -l select=1:ncpus=2:mem=8gb
+#PBS -l select=1:ncpus=2:mem=16gb
 #PBS -l walltime=6:00:00
 set -euo pipefail
 cd "$PBS_O_WORKDIR"
 source jobs/config.sh
 : "${W2V_LANG:?set W2V_LANG}"
-w2v_py -m scripts.download --lang "$W2V_LANG" --data-dir "$W2V_DATA"
+w2v_py -m scripts.download --lang "$W2V_LANG" --data-dir "$W2V_DATA" --max-files "${W2V_MAX_FILES[$W2V_LANG]:-0}"
 w2v_py -m scripts.fetch_benchmarks --lang "$W2V_LANG" --data-dir "$W2V_DATA"

@@ -1,6 +1,7 @@
 """Clean + tokenize (en) or lemmatize (cs/uk) one shard of Wikipedia articles.
 
-Articles are assigned to shards round-robin (article index % num_shards).
+Parquet row groups (~1000 articles each) are assigned to shards round-robin, so each shard reads only its own
+row groups.
 
     python -m scripts.preprocess --lang cs --shard 3 --num-shards 16 --workers 8 --data-dir data
 """
@@ -13,7 +14,7 @@ from typing import Iterator
 
 import pyarrow.parquet as pq
 
-from w2v.textproc import UDPIPE_MODELS, WIKI_SNAPSHOT, UdpipeLemmatizer, clean_lines, tokenize_en
+from w2v.textproc import UDPIPE_MODELS, WIKI_SNAPSHOT, clean_lines, make_lemmatizer, tokenize_en
 
 _process = None
 
@@ -23,7 +24,7 @@ def _init_worker(lang: str, model_path: str | None) -> None:
     if lang == "en":
         _process = tokenize_en
     else:
-        lemmatizer = UdpipeLemmatizer(model_path)
+        lemmatizer = make_lemmatizer(lang, model_path)
         _process = lambda text: lemmatizer("\n\n".join(clean_lines(text)))  # noqa: E731
 
 
@@ -35,13 +36,13 @@ def iter_shard_texts(raw_dir: Path, shard: int, num_shards: int) -> Iterator[str
     files = sorted(Path(raw_dir).glob("*.parquet"))
     if not files:
         raise FileNotFoundError(f"no parquet files in {raw_dir}; run scripts.download first")
-    idx = 0
+    unit = 0
     for f in files:
-        for batch in pq.ParquetFile(f).iter_batches(batch_size=1024, columns=["text"]):
-            for text in batch.column(0).to_pylist():
-                if idx % num_shards == shard:
-                    yield text
-                idx += 1
+        pf = pq.ParquetFile(f)
+        for rg in range(pf.num_row_groups):
+            if unit % num_shards == shard:
+                yield from pf.read_row_group(rg, columns=["text"]).column(0).to_pylist()
+            unit += 1
 
 
 def main(argv=None):

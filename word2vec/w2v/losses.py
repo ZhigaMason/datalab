@@ -24,12 +24,14 @@ def ns_loss(ctx, targets, valid, out_weight, negatives):
 def vicreg_terms(z: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     z = z.float()
     n, d = z.shape
-    std = torch.sqrt(z.var(dim=0) + 1e-4)
-    var_loss = F.relu(1.0 - std).mean()
-    zc = z - z.mean(dim=0)
-    cov = zc.T @ zc / max(n - 1, 1)
-    off_diag = cov - torch.diag(torch.diagonal(cov))
-    return var_loss, off_diag.pow(2).sum() / d
+    with torch.autocast(device_type=z.device.type, enabled=False):  # keep matmul in fp32 under autocast
+        std = torch.sqrt(z.var(dim=0) + 1e-4)
+        var_loss = F.relu(1.0 - std).mean()
+        zc = z - z.mean(dim=0)
+        cov = zc.T @ zc / max(n - 1, 1)
+        off_diag = cov - torch.diag(torch.diagonal(cov))
+        cov_loss = off_diag.pow(2).sum() / d
+    return var_loss, cov_loss
 
 
 def jepa_loss(pred, tgt, valid, lambda_var: float, lambda_cov: float, n_vicreg: int):

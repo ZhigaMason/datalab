@@ -91,3 +91,10 @@ def test_model_jepa_loss_grads_skip_ema():
     assert set(parts) == {"loss_cos", "loss_var", "loss_cov"}
     assert model.emb_ema.weight.grad is None
     assert model.emb.weight.grad is not None and model.predictor.weight.grad is not None
+
+
+def test_vicreg_terms_fp32_under_autocast():
+    with torch.autocast("cpu", dtype=torch.bfloat16):
+        var_l, cov_l = vicreg_terms(torch.randn(256, 8))
+    assert var_l.dtype == torch.float32
+    assert cov_l.dtype == torch.float32

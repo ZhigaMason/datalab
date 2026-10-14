@@ -4,7 +4,7 @@ import pytest
 import torch
 
 from w2v.data import Vocab
-from w2v.export import export_onnx, load_onnx_embeddings, verify_onnx, write_vec
+from w2v.export import dequantize_int8, export_onnx, load_onnx_embeddings, verify_onnx, write_vec
 
 
 def test_export_and_verify_with_dynamic_shapes(tmp_path):
@@ -17,7 +17,7 @@ def test_export_and_verify_with_dynamic_shapes(tmp_path):
     assert [o.name for o in sess.get_outputs()] == ["embeddings"]
     out = sess.run(None, {"ids": np.array([[0, 5, 39]], dtype=np.int64)})[0]
     assert out.shape == (1, 3, 6)
-    np.testing.assert_array_equal(out[0, 1], w[5].half().float().numpy())
+    np.testing.assert_array_equal(out[0, 1], dequantize_int8(w)[5].numpy())
     assert sess.run(None, {"ids": np.zeros((4, 13), dtype=np.int64)})[0].shape == (4, 13, 6)
 
 
@@ -35,7 +35,7 @@ def test_load_onnx_embeddings_and_write_vec(tmp_path):
     vocab.save(tmp_path / "vocab.json")
     words, mat = load_onnx_embeddings(tmp_path, chunk=2)
     assert words == vocab.words
-    np.testing.assert_array_equal(mat, w.half().float().numpy())
+    np.testing.assert_array_equal(mat, dequantize_int8(w).numpy())
     write_vec(tmp_path / "v.vec", words, mat)
     lines = (tmp_path / "v.vec").read_text(encoding="utf-8").splitlines()
     assert lines[0] == "5 4" and lines[3].startswith("a ") and len(lines) == 6
@@ -66,13 +66,15 @@ def test_export_is_single_self_contained_file(tmp_path):
     dst.mkdir()
     shutil.copy(src / "model.onnx", dst / "model.onnx")
     out = ort.InferenceSession(str(dst / "model.onnx")).run(None, {"ids": np.array([[3, 29]], dtype=np.int64)})[0]
-    np.testing.assert_array_equal(out[0, 1], w[29].half().float().numpy())
+    np.testing.assert_array_equal(out[0, 1], dequantize_int8(w)[29].numpy())
 
 
 def test_export_rejects_weights_over_protobuf_limit(tmp_path):
     class Huge:
+        shape = (2**23, 256)
+
         def numel(self):
-            return 2**30
+            return 2**31
 
         def detach(self):
             return self
@@ -81,18 +83,21 @@ def test_export_rejects_weights_over_protobuf_limit(tmp_path):
         export_onnx(Huge(), tmp_path / "m.onnx")
 
 
-def test_export_stores_float16_table_and_returns_float32(tmp_path):
+def test_export_stores_int8_table_and_returns_float32(tmp_path):
     import onnx
     from onnx import TensorProto
 
     torch.manual_seed(0)
     w = torch.randn(30, 8)
+    w[5] = 0.0  # an all-zero row (e.g. padding) must stay zero, not NaN
     path = export_onnx(w, tmp_path / "m.onnx")
     model = onnx.load(str(path))
-    assert [(t.name, t.data_type, list(t.dims)) for t in model.graph.initializer] == \
-        [("embeddings_fp16", TensorProto.FLOAT16, [30, 8])]
+    assert sorted((t.name, t.data_type, list(t.dims)) for t in model.graph.initializer) == \
+        [("embeddings_int8", TensorProto.INT8, [30, 8]), ("row_scales", TensorProto.FLOAT, [30, 1])]
     assert model.graph.output[0].type.tensor_type.elem_type == TensorProto.FLOAT
-    out = ort.InferenceSession(str(path)).run(None, {"ids": np.array([[3, 0, 29]], dtype=np.int64)})[0]
+    out = ort.InferenceSession(str(path)).run(None, {"ids": np.array([[3, 5, 29]], dtype=np.int64)})[0]
     assert out.dtype == np.float32
-    np.testing.assert_array_equal(out[0], w[[3, 0, 29]].half().float().numpy())
+    np.testing.assert_array_equal(out[0], dequantize_int8(w)[[3, 5, 29]].numpy())
+    assert (out[0, 1] == 0).all()
+    np.testing.assert_allclose(out[0], w[[3, 5, 29]].numpy(), atol=w.abs().max().item() / 127)
     assert verify_onnx(path, w) == 0.0

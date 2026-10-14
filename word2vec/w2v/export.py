@@ -1,6 +1,7 @@
 """ONNX artifact: embedding lookup ids (batch, seq) int64 -> embeddings (batch, seq, dim) float32.
 
-The word2vec input table is stored as float16 (half the size) and cast to float32 after the lookup.
+The word2vec input table is stored as int8 with one float32 scale per row (symmetric absmax
+quantization, a quarter of the float32 size); rows are dequantized after the lookup.
 """
 from __future__ import annotations
 
@@ -14,21 +15,37 @@ from torch import nn
 from w2v.data import Vocab
 
 
+def quantize_int8(weight: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """Per-row symmetric int8: weight ~= q * scale, scale = row absmax / 127 (all-zero rows get scale 0)."""
+    w = weight.detach().cpu().float()
+    scale = w.abs().amax(dim=1, keepdim=True) / 127
+    q = torch.round(w / torch.where(scale > 0, scale, torch.ones_like(scale))).clamp(-127, 127).to(torch.int8)
+    return q, scale
+
+
+def dequantize_int8(weight: torch.Tensor) -> torch.Tensor:
+    """What the artifact returns for each row of weight."""
+    q, scale = quantize_int8(weight)
+    return q.float() * scale
+
+
 class EmbeddingLookup(nn.Module):
-    """The only thing inference needs: the input embedding table (float16) and a lookup."""
+    """The only thing inference needs: the input embedding table (int8 + row scales) and a lookup."""
 
     def __init__(self, weight: torch.Tensor):
         super().__init__()
-        self.register_buffer("embeddings_fp16", weight.detach().cpu().half())
+        q, scale = quantize_int8(weight)
+        self.register_buffer("embeddings_int8", q)
+        self.register_buffer("row_scales", scale)
 
     def forward(self, ids: torch.Tensor) -> torch.Tensor:
-        return F.embedding(ids, self.embeddings_fp16).float()
+        return F.embedding(ids, self.embeddings_int8).float() * F.embedding(ids, self.row_scales)
 
 
 def export_onnx(weight: torch.Tensor, path) -> Path:
     path = Path(path)
-    if weight.numel() * 2 >= 2**31:
-        raise ValueError(f"embedding matrix of {weight.numel()} float16 values reaches the 2 GB protobuf limit; "
+    if weight.numel() + weight.shape[0] * 4 >= 2**31:
+        raise ValueError(f"embedding matrix of {weight.numel()} int8 values reaches the 2 GB protobuf limit; "
                          "a single-file ONNX artifact is not possible")
     model = EmbeddingLookup(weight).eval()
     example = torch.zeros((2, 3), dtype=torch.long)
@@ -41,7 +58,7 @@ def export_onnx(weight: torch.Tensor, path) -> Path:
 def verify_onnx(path, weight: torch.Tensor, atol: float = 1e-5) -> float:
     import onnxruntime as ort
 
-    weight = weight.detach().cpu().half().float()  # the artifact stores float16; compare with what it holds
+    weight = dequantize_int8(weight)  # the artifact stores int8; compare with what it holds
     v = weight.shape[0]
     ids = np.random.default_rng(0).integers(0, v, size=(3, 17)).astype(np.int64)
     ids[0, 0], ids[0, 1] = 0, v - 1

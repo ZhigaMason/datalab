@@ -121,7 +121,7 @@ For all variants the exported table is the context encoder `E`.
 - Hyperparameters exposed as CLI flags: `--dim` (default 300), `--window` (k, default
   5), `--neg` (K), `--subsample-t`, `--lr`, `--batch`, `--seq-len`, `--epochs`,
   `--ema-start`, `--lambda-var`, `--lambda-cov`, `--eval-every`.
-- Run directory: `runs/<lang>-<mode>[-jepa]-d<dim>-s<seed>/`
+- Run directory: `runs/<lang>-<mode>[-jepa]-d<dim>-w<window>-s<seed>/`
   - `metrics.jsonl` (loss, lr, tokens/s, collapse monitors, periodic eval)
   - TensorBoard events
   - `ckpt.pt` saved periodically; automatic resume if present.
@@ -131,7 +131,15 @@ For all variants the exported table is the context encoder `E`.
 ### ONNX export — `w2v/export.py`
 
 - Graph: `ids (B, T) int64 → embeddings (B, T, dim) float32`, dynamic B and T.
-- Post-export check: onnxruntime output vs PyTorch, `atol = 1e-5`; failure aborts.
+- Table storage: int8 with per-row symmetric scales, `embeddings_int8 [V, dim]` and
+  `row_scales [V, 1] float32` with scale = row absmax / 127. All-zero rows (`<pad>`) get scale 0. The
+  graph is `gather(q).float() * gather(scale)`. It is a single file with no external data, so
+  `V·dim + 4V` must stay under the 2 GB protobuf limit.
+- Post-export check: onnxruntime output vs the dequantized table, `atol = 1e-5`; NaN or
+  a mismatch aborts. `final_metrics.json` is evaluated on the stored (quantized) table.
+- Revision history: float32 (initial), then float16 (`e8d683e`), then int8 (`3a8f3f5`). The int8 rows keep a mean
+  cosine of 0.99997 with fp16, and benchmark deltas are ≤ 0.001. `scripts/quantize_onnx.py` converts earlier
+  float16 runs in place and keeps `model_fp16.onnx`.
 
 ### Evaluation — `w2v/evaluate.py` (operates on the ONNX artifact)
 
@@ -186,10 +194,24 @@ For all variants the exported table is the context encoder `E`.
     vocab to `$SCRATCHDIR`, runs training with env vars LANG/MODE/JEPA/DIM/SEED,
     copies the run directory back to storage (also on failure via `trap`).
 - `jobs/submit_all.sh` — submits the grid {en, cs, uk} × {4 variants} ×
-  `DIMS` (default `"300"`) × `SEEDS` (default `"0"`), chaining with
-  `qsub -W depend=afterok:` so training waits for data preparation.
+  `DIMS` (default `"300"`) × `WINDOWS` (default `"5"`) × `SEEDS` (default `"0"`), chaining with
+  `qsub -W depend=afterok:` so training waits for data preparation. Training runs on
+  `gpu_dgx` (`train_dgx.pbs`, two lanes on 2 GPUs, `RUNS_PER_JOB` runs per job) by default.
+  The 2026-10 grid is dims {16, 64, 256, 300} × windows {5, 10, 20}, 144 runs, encoded
+  with `W2V_PAD = 20`.
 - Robustness: scripts validate inputs and fail loudly; prep steps are idempotent
   (skip finished shards via marker files); training resumes from `ckpt.pt`.
+
+## 5. Publishing
+
+- `scripts/hf_upload.sh` stages every run of the grid as hard links (`model_int8.onnx`,
+  `model_fp16.onnx`, `config.json`, `final_metrics*.json`), plus one `vocab/<lang>.json` per
+  language and the model card `scripts/hf_model_card.md`. It uploads them with
+  `hf upload-large-folder` to the public model repo `mkkhavil/word2vec-wiki-cs-en-uk`.
+- Intended consumer: a static GitHub Pages demo running onnxruntime-web. It fetches the
+  selected table from the Hub at runtime, since the Hub serves CORS headers. The current
+  graph is lookup-only; nearest-neighbour and analogy search would need a second exported
+  graph (query · tableᵀ → top-k), which is not built yet.
 
 ## Repository layout
 
@@ -197,8 +219,10 @@ For all variants the exported table is the context encoder `E`.
 word2vec/
   w2v/              data.py, model.py, losses.py, train.py, export.py, evaluate.py
   scripts/          download.py, preprocess.py, build_vocab.py, encode.py,
-                    fetch_benchmarks.py, compare.py
-  jobs/             config.sh, setup_env.sh, prep.pbs, vocab.pbs, train.pbs, submit_all.sh
+                    fetch_benchmarks.py, compare.py, quantize_onnx.py,
+                    hf_upload.sh, hf_model_card.md
+  jobs/             config.sh, setup_env.sh, download.pbs, prep.pbs, vocab.pbs, train.pbs,
+                    train_dgx.pbs, train_run.sh, submit_all.sh
   tests/            unit tests + tiny end-to-end smoke test
   pyproject.toml    managed by uv
   README.md

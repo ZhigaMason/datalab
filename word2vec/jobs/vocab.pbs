@@ -4,6 +4,14 @@
 #PBS -l select=1:ncpus=2:mem=48gb
 #PBS -l walltime=8:00:00
 set -euo pipefail
+# Fail fast if this node cannot reach /storage: a hung NFS mount blocks forever in uninterruptible
+# I/O (seen on adan18/adan26), so probe in the background instead of waiting on it.
+( stat "$PBS_O_WORKDIR" >/dev/null ) & probe=$!
+for _ in $(seq "${STORAGE_PROBE_SECS:-60}"); do kill -0 "$probe" 2>/dev/null || break; sleep 1; done
+if kill -0 "$probe" 2>/dev/null || ! wait "$probe"; then
+    echo "storage $PBS_O_WORKDIR unreachable from $(hostname); resubmit this job" >&2
+    exit 75
+fi
 cd "$PBS_O_WORKDIR"
 source jobs/config.sh
 : "${W2V_LANG:?set W2V_LANG}" "${NUM_SHARDS:?set NUM_SHARDS}"

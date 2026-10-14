@@ -7,8 +7,8 @@ from w2v.train import ema_tau, lr_lambda, parse_args, run_name, train
 
 
 def test_run_name():
-    assert run_name("cs", "causal", True, 300, 0) == "cs-causal-jepa-d300-s0"
-    assert run_name("en", "bidir", False, 100, 2) == "en-bidir-d100-s2"
+    assert run_name("cs", "causal", True, 300, 5, 0) == "cs-causal-jepa-d300-w5-s0"
+    assert run_name("en", "bidir", False, 100, 20, 2) == "en-bidir-d100-w20-s2"
 
 
 def test_schedules():
@@ -33,10 +33,10 @@ def _args(root, *extra, mode="bidir", jepa=False, steps=6):
 @pytest.mark.parametrize("jepa", [False, True])
 def test_train_end_to_end(tiny_data, mode, jepa):
     run_dir = train(_args(tiny_data, "--write-vec", mode=mode, jepa=jepa))
-    assert run_dir.name == run_name("en", mode, jepa, 16, 0)
-    for f in ("config.json", "metrics.jsonl", "ckpt.pt", "model.onnx", "vocab.json", "final_metrics.json",
-              "vectors.vec"):
+    assert run_dir.name == run_name("en", mode, jepa, 16, 5, 0)
+    for f in ("config.json", "metrics.jsonl", "model.onnx", "vocab.json", "final_metrics.json", "vectors.vec"):
         assert (run_dir / f).exists(), f
+    assert not (run_dir / "ckpt.pt").exists()  # finished runs drop their checkpoint unless --keep-ckpt
     final = json.loads((run_dir / "final_metrics.json").read_text())
     assert final["onnx_max_abs_diff"] <= 1e-5 and "sim_toy/spearman" in final and "collapse_warning" in final
     records = [json.loads(l) for l in (run_dir / "metrics.jsonl").read_text().splitlines()]
@@ -49,12 +49,12 @@ def test_train_end_to_end(tiny_data, mode, jepa):
 
 
 def test_resume_matches_uninterrupted_run(tiny_data):
-    straight = train(_args(tiny_data, "--run-dir", str(tiny_data / "runs/straight")))
+    straight = train(_args(tiny_data, "--run-dir", str(tiny_data / "runs/straight"), "--keep-ckpt"))
     interrupted = tiny_data / "runs/interrupted"
     train(_args(tiny_data, "--run-dir", str(interrupted), "--stop-after", "3"))
     assert torch.load(interrupted / "ckpt.pt", weights_only=False)["step"] == 3
     assert not (interrupted / "model.onnx").exists()
-    train(_args(tiny_data, "--run-dir", str(interrupted)))
+    train(_args(tiny_data, "--run-dir", str(interrupted), "--keep-ckpt"))
     a = torch.load(straight / "ckpt.pt", weights_only=False)
     b = torch.load(interrupted / "ckpt.pt", weights_only=False)
     assert a["step"] == b["step"] == 6
@@ -74,10 +74,10 @@ def test_window_wider_than_encoded_pad_is_rejected(tiny_data):
 
 
 def test_jepa_resume_matches_uninterrupted_run(tiny_data):
-    straight = train(_args(tiny_data, "--run-dir", str(tiny_data / "runs/straight"), jepa=True))
+    straight = train(_args(tiny_data, "--run-dir", str(tiny_data / "runs/straight"), "--keep-ckpt", jepa=True))
     interrupted = tiny_data / "runs/interrupted"
     train(_args(tiny_data, "--run-dir", str(interrupted), "--stop-after", "3", jepa=True))
-    train(_args(tiny_data, "--run-dir", str(interrupted), jepa=True))
+    train(_args(tiny_data, "--run-dir", str(interrupted), "--keep-ckpt", jepa=True))
     a = torch.load(straight / "ckpt.pt", weights_only=False)["model"]
     b = torch.load(interrupted / "ckpt.pt", weights_only=False)["model"]
     for k in ("emb.weight", "emb_ema.weight", "predictor.weight"):

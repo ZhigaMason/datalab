@@ -9,7 +9,7 @@ import csv
 import json
 from pathlib import Path
 
-ID_COLS = ["run", "lang", "variant", "dim", "seed"]
+ID_COLS = ["run", "lang", "variant", "dim", "window", "seed"]
 
 
 def collect(runs_dir) -> list[dict]:
@@ -19,8 +19,8 @@ def collect(runs_dir) -> list[dict]:
         metrics = json.loads(metrics_path.read_text())
         variant = cfg["mode"] + ("-jepa" if cfg["jepa"] else "")
         rows.append({"run": metrics_path.parent.name, "lang": cfg["lang"], "variant": variant,
-                     "dim": cfg["dim"], "seed": cfg["seed"], **metrics})
-    rows.sort(key=lambda r: (r["lang"], r["variant"], r["dim"], r["seed"]))
+                     "dim": cfg["dim"], "window": cfg["window"], "seed": cfg["seed"], **metrics})
+    rows.sort(key=lambda r: (r["lang"], r["variant"], r["dim"], r["window"], r["seed"]))
     return rows
 
 

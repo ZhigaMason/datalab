@@ -26,8 +26,8 @@ CONFIG_KEYS = ("lang", "mode", "jepa", "dim", "window", "neg", "subsample_t", "l
 COLLAPSE_STD = 1e-3
 
 
-def run_name(lang: str, mode: str, jepa: bool, dim: int, seed: int) -> str:
-    return f"{lang}-{mode}{'-jepa' if jepa else ''}-d{dim}-s{seed}"
+def run_name(lang: str, mode: str, jepa: bool, dim: int, window: int, seed: int) -> str:
+    return f"{lang}-{mode}{'-jepa' if jepa else ''}-d{dim}-w{window}-s{seed}"
 
 
 def lr_lambda(step: int, total: int, warmup: int) -> float:
@@ -73,6 +73,8 @@ def parse_args(argv=None) -> argparse.Namespace:
                    help="torch.compile the loss (default: on for CUDA)")
     p.add_argument("--allow-no-benchmarks", action="store_true", help="train even if no benchmark files exist")
     p.add_argument("--write-vec", action="store_true", help="also write vectors.vec")
+    p.add_argument("--keep-ckpt", action="store_true",
+                   help="keep ckpt.pt after a finished run (default: delete it; it holds weights + Adam state)")
     return p.parse_args(argv)
 
 
@@ -114,7 +116,7 @@ def train(args) -> Path:
                                 "(or pass --allow-no-benchmarks)")
 
     run_dir = Path(args.run_dir) if args.run_dir else Path(args.runs_dir) / run_name(
-        args.lang, args.mode, args.jepa, args.dim, args.seed)
+        args.lang, args.mode, args.jepa, args.dim, args.window, args.seed)
     config = {k: getattr(args, k) for k in CONFIG_KEYS}
     config.update(vocab_size=len(vocab), total_steps=total, data_stats=stats)
     _prepare_run_dir(args, run_dir, config)
@@ -214,6 +216,8 @@ def train(args) -> Path:
     (run_dir / "final_metrics.json").write_text(json.dumps(final, indent=2))
     if args.write_vec:
         write_vec(run_dir / "vectors.vec", words, matrix)
+    if not args.keep_ckpt:
+        ckpt_path.unlink(missing_ok=True)
     writer.close()
     print(json.dumps(final, indent=2))
     return run_dir

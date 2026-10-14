@@ -65,7 +65,10 @@ Dequantized vector of row i = `embeddings_int8[i] * row_scales[i]`.
 
 **Model picker.** Four `<select>`s: language (en/cs/uk), objective (NS/JEPA), direction
 (bidir/causal), dim (16/64/256/300, sizes shown), window (5/10/20). Default
-`en-bidir-d300-w5`. "Load" button; progress bar showing MB downloaded. Vocab is reused when only
+`en-bidir-d300-w5`. Next to the "Load" button a size label shows the estimated download
+(`V·(dim + 4)` bytes, V = 200k: d16 ≈ 4 MB, d64 ≈ 14 MB, d256 ≈ 52 MB, d300 ≈ 61 MB). When the
+estimate is over 20 MB, a small ⚠ sign appears with the label, and its tooltip says "Large download (≈N MB), so
+consider a smaller dim on mobile data." The sign is informational and does not block loading. "Load" button; progress bar showing MB downloaded. Vocab is reused when only
 the run changes within a language. Panels are disabled until a model is loaded.
 
 **Arithmetic editor.** A text input, `k` number input (default 10), "Go" (also on Enter).

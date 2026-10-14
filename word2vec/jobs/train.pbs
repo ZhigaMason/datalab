@@ -4,7 +4,7 @@
 #PBS -q gpu
 #PBS -l select=1:ncpus=4:ngpus=1:gpu_mem=20gb:mem=32gb:scratch_local=40gb
 #PBS -l walltime=1:00:00
-# One run per job (gpu queue). Env: W2V_LANG MODE JEPA DIM SEED [EPOCHS] [TRAIN_BUDGET].
+# One run per job (gpu queue). Env: W2V_LANG MODE JEPA DIM SEED [WINDOW] [EPOCHS] [TRAIN_BUDGET].
 set -euo pipefail
 # Fail fast if this node cannot reach /storage: a hung NFS mount blocks forever in uninterruptible
 # I/O (seen on adan18/adan26), so probe in the background instead of waiting on it.

@@ -14,6 +14,8 @@ declare -A W2V_SHARDS=([en]=16 [cs]=16 [uk]=32)
 # Parquet files downloaded per language (evenly spaced; 0 = all). English is capped to max(cs, uk) tokens
 # (~340M), which 8 of its 41 files (~73M tokens each) cover with margin.
 declare -A W2V_MAX_FILES=([en]=8 [cs]=0 [uk]=0)
+# <pad> tokens between sentences in tokens.bin; must be >= the largest training window.
+export W2V_PAD=20
 
 # Run the project Python from the synced environment (jobs need no uv on PATH).
 w2v_py() { "$UV_PROJECT_ENVIRONMENT/bin/python" "$@"; }

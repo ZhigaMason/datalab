@@ -52,7 +52,7 @@ Dequantized vector of row i = `embeddings_int8[i] * row_scales[i]`.
 | `src/onnx.ts` | `readInitializers(buf: ArrayBuffer): Map<string, {dims, dataType, raw: Uint8Array}>` — minimal protobuf walker (ModelProto → graph → initializer: name, dims, data_type, raw_data). Ignores everything else. |
 | `src/model.ts` | `Model` class: `words`, `index: Map<string, number>`, `dim`, `vector(i): Float32Array` (dequantized), `invNorm: Float32Array` precomputed on load. `loadModel(run, lang, onProgress)` fetches vocab + ONNX with a streamed progress callback. |
 | `src/expr.ts` | Parser for `[coef*]word (± [coef*]word)*`; returns `{terms: {word, coef}[]}` or an error naming the unknown/bad token. Evaluation: `Σ coef·unit(vec(word))` (terms are L2-normalized before summing, as in standard analogy evaluation). |
-| `src/knn.ts` | `knn(model, query, k, exclude: Set<number>)` — cosine over all rows, int8 dot product × scale × invNorm, top-k via a small bounded min-heap. |
+| `src/knn.ts` | `knn(model, query, k, exclude: Set<number>)` — cosine over all rows, int8 dot product × scale × invNorm, top-k kept in a small sorted buffer (k ≤ 100). |
 | `src/geom.ts` | `pca2(vectors)` (power iteration on the small centred set, 2 components), `projectAxes(vecs, x, y, orthogonalize)` (y Gram–Schmidt against x when on; then dot products with unit axes). |
 | `src/plot.ts` | Hand-written SVG scatter: points with labels, optional arrows, auto-fit with padding, hover title. Shared by both panels. |
 | `src/main.ts` | Wires DOM events to the above. |

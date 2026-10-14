@@ -1,30 +1,36 @@
-"""ONNX artifact: embedding lookup ids (batch, seq) int64 -> embeddings (batch, seq, dim) float32."""
+"""ONNX artifact: embedding lookup ids (batch, seq) int64 -> embeddings (batch, seq, dim) float32.
+
+The word2vec input table is stored as float16 (half the size) and cast to float32 after the lookup.
+"""
 from __future__ import annotations
 
 from pathlib import Path
 
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch import nn
 
-from w2v.data import PAD_ID, Vocab
+from w2v.data import Vocab
 
 
 class EmbeddingLookup(nn.Module):
+    """The only thing inference needs: the input embedding table (float16) and a lookup."""
+
     def __init__(self, weight: torch.Tensor):
         super().__init__()
-        self.emb = nn.Embedding.from_pretrained(weight, freeze=True, padding_idx=PAD_ID)
+        self.register_buffer("embeddings_fp16", weight.detach().cpu().half())
 
     def forward(self, ids: torch.Tensor) -> torch.Tensor:
-        return self.emb(ids)
+        return F.embedding(ids, self.embeddings_fp16).float()
 
 
 def export_onnx(weight: torch.Tensor, path) -> Path:
     path = Path(path)
-    if weight.numel() * 4 >= 2**31:
-        raise ValueError(f"embedding matrix of {weight.numel()} float32 values reaches the 2 GB protobuf limit; "
+    if weight.numel() * 2 >= 2**31:
+        raise ValueError(f"embedding matrix of {weight.numel()} float16 values reaches the 2 GB protobuf limit; "
                          "a single-file ONNX artifact is not possible")
-    model = EmbeddingLookup(weight.detach().float().cpu()).eval()
+    model = EmbeddingLookup(weight).eval()
     example = torch.zeros((2, 3), dtype=torch.long)
     dims = {0: torch.export.Dim("batch"), 1: torch.export.Dim("seq")}
     torch.onnx.export(model, (example,), str(path), input_names=["ids"], output_names=["embeddings"],
@@ -35,7 +41,7 @@ def export_onnx(weight: torch.Tensor, path) -> Path:
 def verify_onnx(path, weight: torch.Tensor, atol: float = 1e-5) -> float:
     import onnxruntime as ort
 
-    weight = weight.detach().float().cpu()
+    weight = weight.detach().cpu().half().float()  # the artifact stores float16; compare with what it holds
     v = weight.shape[0]
     ids = np.random.default_rng(0).integers(0, v, size=(3, 17)).astype(np.int64)
     ids[0, 0], ids[0, 1] = 0, v - 1

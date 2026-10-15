@@ -77,6 +77,15 @@ export class Model {
 export type Progress = (what: string, loaded: number, total: number) => void
 
 export async function fetchBytes(url: string, what: string, onProgress: Progress): Promise<ArrayBuffer> {
+  try {
+    return await download(url, what, onProgress)
+  } catch (e) {
+    const msg = (e as Error).message
+    throw new Error(msg.includes(url) ? msg : `${msg} for ${url}`) // network errors only say "Failed to fetch"
+  }
+}
+
+async function download(url: string, what: string, onProgress: Progress): Promise<ArrayBuffer> {
   const res = await fetch(url)
   if (!res.ok || !res.body) throw new Error(`HTTP ${res.status} for ${url}`)
   const total = Number(res.headers.get('content-length')) || 0

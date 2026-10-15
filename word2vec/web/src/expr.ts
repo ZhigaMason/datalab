@@ -16,6 +16,7 @@ export class ExprError extends Error {}
 const TERM = /\s*([+-])?\s*(?:(\d+(?:\.\d+)?|\.\d+)\s*\*?\s*)?([^\s+*\d.\-][^\s+*]*)\s*/y
 
 export function parse(src: string): Term[] {
+  src = src.replace(/[−–—]/g, '-') // the page itself shows U+2212 in hints and labels
   if (!src.trim()) throw new ExprError('empty expression')
   const re = new RegExp(TERM)
   const terms: Term[] = []
@@ -45,6 +46,14 @@ export function evaluate(model: Model, src: string): Resolved {
     for (let j = 0; j < model.dim; j++) vector[j] += t.coef * u[j]
   }
   return { terms, vector }
+}
+
+/** True when the terms cancel out (up to float32 rounding), so the result has no meaningful direction. */
+export function isZero(r: Resolved): boolean {
+  const scale = r.terms.reduce((s, t) => s + Math.abs(t.coef), 0)
+  let n = 0
+  for (const x of r.vector) n += x * x
+  return Math.sqrt(n) <= 1e-4 * scale
 }
 
 export function splitWords(src: string): string[] {

@@ -1,4 +1,4 @@
-import { evaluate, ExprError, splitWords, type Resolved } from './expr'
+import { evaluate, ExprError, isZero, splitWords, type Resolved } from './expr'
 import { normalize, pca2, projectAxes } from './geom'
 import { knn } from './knn'
 import { estimateMB, LARGE_MB, loadModel, runName, type Lang, type Model, type RunSpec } from './model'
@@ -111,13 +111,13 @@ function runEditor(): void {
     err.textContent = e.message
     return
   }
-  const result = normalize(res.vector)
-  if (result.every((x) => x === 0)) {
+  if (isZero(res)) {
     err.textContent = 'The expression sums to the zero vector.'
     list.replaceChildren()
     renderPlot(svg, [])
     return
   }
+  const result = normalize(res.vector)
   const k = Math.min(100, Math.max(1, Math.round(Number(value('k'))) || 10))
   const nbs = knn(m, res.vector, k, new Set(res.terms.map((t) => t.id)))
 
@@ -168,9 +168,11 @@ function runEditor(): void {
 
 function axis(m: Model, id: string, name: string): Float32Array {
   try {
-    return evaluate(m, value(id)).vector
+    const r = evaluate(m, value(id))
+    if (isZero(r)) throw new ExprError(`${name} sums to the zero vector`)
+    return r.vector
   } catch (e) {
-    if (e instanceof ExprError) throw new ExprError(`${name}: ${e.message}`)
+    if (e instanceof ExprError && !e.message.startsWith(name)) throw new ExprError(`${name}: ${e.message}`)
     throw e
   }
 }

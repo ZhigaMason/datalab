@@ -60,4 +60,11 @@ describe('fetchBytes', () => {
     vi.stubGlobal('fetch', async () => new Response('nope', { status: 404 }))
     await expect(fetchBytes('https://x/missing', 'm', () => {})).rejects.toThrow('HTTP 404 for https://x/missing')
   })
+
+  test('names the URL on a network error', async () => {
+    vi.stubGlobal('fetch', async () => {
+      throw new TypeError('Failed to fetch')
+    })
+    await expect(fetchBytes('https://x/vocab', 'v', () => {})).rejects.toThrow('Failed to fetch for https://x/vocab')
+  })
 })

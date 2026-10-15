@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { evaluate, ExprError, parse, splitWords } from '../src/expr'
+import { evaluate, ExprError, isZero, parse, splitWords } from '../src/expr'
 import { makeModel } from './helpers'
 
 describe('parse', () => {
@@ -20,6 +20,14 @@ describe('parse', () => {
     expect(parse('.5 * a - 1.5*b')).toEqual([
       { word: 'a', coef: 0.5 },
       { word: 'b', coef: -1.5 },
+    ])
+  })
+
+  test('accepts the Unicode minus and dashes the page itself shows', () => {
+    expect(parse('king − man – woman')).toEqual([
+      { word: 'king', coef: 1 },
+      { word: 'man', coef: -1 },
+      { word: 'woman', coef: -1 },
     ])
   })
 
@@ -51,6 +59,21 @@ describe('evaluate', () => {
 
   test('hints at spaces when an unknown word contains a hyphen', () => {
     expect(() => evaluate(m, 'a-b')).toThrow(/spaces around -/)
+  })
+})
+
+describe('isZero', () => {
+  const m = makeModel(['<pad>', 'a', 'b'], [[0, 0], [10, 0], [0, 20]])
+  const terms = [{ word: 'a', coef: 1, id: 1 }, { word: 'a', coef: -1, id: 1 }]
+
+  test('treats exact and rounding-level cancellation as zero', () => {
+    expect(isZero(evaluate(m, 'a - a'))).toBe(true)
+    expect(isZero({ terms, vector: Float32Array.of(3e-8, -1e-8) })).toBe(true)
+  })
+
+  test('keeps genuine results', () => {
+    expect(isZero(evaluate(m, 'a - b'))).toBe(false)
+    expect(isZero({ terms, vector: Float32Array.of(0.01, 0) })).toBe(false)
   })
 })
 

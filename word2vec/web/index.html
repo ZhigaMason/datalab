@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>word2vec explorer</title>
+  </head>
+  <body>
+    <header>
+      <h1>word2vec explorer</h1>
+      <p>
+        Word vectors trained on Wikipedia in English, Czech and Ukrainian
+        (<a href="https://huggingface.co/mkkhavil/word2vec-wiki-cs-en-uk">models on Hugging Face</a>).
+        Czech and Ukrainian words are lemmas. Everything runs in your browser.
+      </p>
+    </header>
+
+    <section id="picker">
+      <div class="row">
+        <label>Language
+          <select id="lang"><option value="en">English</option><option value="cs">Czech</option><option value="uk">Ukrainian</option></select>
+        </label>
+        <label>Objective
+          <select id="objective"><option value="ns">negative sampling</option><option value="jepa">JEPA</option></select>
+        </label>
+        <label>Context
+          <select id="direction"><option value="bidir">bidirectional</option><option value="causal">causal</option></select>
+        </label>
+        <label>Dim
+          <select id="dim"><option>16</option><option>64</option><option>256</option><option selected>300</option></select>
+        </label>
+        <label>Window
+          <select id="window"><option selected>5</option><option>10</option><option>20</option></select>
+        </label>
+        <button id="load">Load</button>
+        <span id="size" class="status"></span>
+        <span id="size-warn" role="img" aria-label="Large download" hidden>⚠</span>
+      </div>
+      <div class="row">
+        <progress id="progress" hidden></progress>
+        <span id="status" class="status">No model loaded.</span>
+      </div>
+    </section>
+
+    <fieldset id="editor" disabled>
+      <legend>Vector arithmetic</legend>
+      <div class="row">
+        <input id="expr" type="text" spellcheck="false" aria-label="Expression" />
+        <label>k <input id="k" type="number" min="1" max="100" value="10" /></label>
+        <button id="go">Go</button>
+      </div>
+      <p class="hint">
+        Use + and − with spaces and optional weights: <code>king - man + woman</code>,
+        <code>0.5*paris + berlin</code>. Click a neighbour to add it.
+      </p>
+      <p id="expr-error" class="error" role="alert"></p>
+      <div class="split">
+        <ol id="neighbours"></ol>
+        <div>
+          <div class="legend">
+            <span><i class="sw term"></i>input words</span>
+            <span><i class="sw result"></i>result</span>
+            <span><i class="sw neighbour"></i>neighbours</span>
+            <span><i class="sw path"></i>partial sums</span>
+          </div>
+          <svg id="pca-plot" class="plot" role="img" aria-label="PCA map of the input words, the result and its neighbours"></svg>
+        </div>
+      </div>
+    </fieldset>
+
+    <fieldset id="projection" disabled>
+      <legend>2D projection</legend>
+      <div class="row">
+        <label for="xaxis">x axis</label>
+        <input id="xaxis" type="text" spellcheck="false" />
+      </div>
+      <div class="row">
+        <label for="yaxis">y axis</label>
+        <input id="yaxis" type="text" spellcheck="false" />
+        <label><input id="ortho" type="checkbox" checked /> make y ⊥ x</label>
+      </div>
+      <div class="row">
+        <textarea id="words" rows="2" spellcheck="false" aria-label="Words to plot"></textarea>
+        <button id="plot">Plot</button>
+      </div>
+      <p id="proj-error" class="error" role="alert"></p>
+      <svg id="proj-plot" class="plot" role="img" aria-label="Words projected onto the chosen axes"></svg>
+    </fieldset>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

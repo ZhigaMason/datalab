@@ -1,0 +1,62 @@
+:root {
+  color-scheme: light dark;
+  --surface: #fcfcfb;
+  --panel: #f3f2ef;
+  --ink: #0b0b0b;
+  --ink-2: #52514e;
+  --rule: #dcdbd6;
+  --term: #2a78d6;
+  --result: #eb6834;
+  --neighbour: #1baf7a;
+  font: 15px/1.45 system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --surface: #1a1a19;
+    --panel: #232321;
+    --ink: #f0efec;
+    --ink-2: #c3c2b7;
+    --rule: #3a3a37;
+    --term: #3987e5;
+    --result: #d95926;
+    --neighbour: #199e70;
+  }
+}
+body { max-width: 1100px; margin: 0 auto; padding: 16px; background: var(--surface); color: var(--ink); }
+a { color: var(--term); }
+header p, .hint, .status { color: var(--ink-2); }
+section, fieldset { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 12px 16px; margin: 0 0 16px; }
+fieldset:disabled { opacity: 0.55; }
+legend { font-weight: 600; }
+.row { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 8px; }
+input[type='text'], textarea { flex: 1 1 260px; font: inherit; padding: 4px 6px; }
+input[type='number'] { width: 4em; }
+.error { min-height: 1.4em; margin: 4px 0; }
+.error:not(:empty)::before { content: '⚠ '; }
+#size-warn { cursor: help; }
+progress { width: 200px; }
+.split { display: grid; grid-template-columns: minmax(180px, 1fr) 3fr; gap: 16px; }
+@media (max-width: 720px) { .split { grid-template-columns: 1fr; } }
+#neighbours { margin: 0; padding-left: 2em; font-variant-numeric: tabular-nums; }
+#neighbours button { all: unset; cursor: pointer; text-decoration: underline dotted; }
+#neighbours .score { color: var(--ink-2); margin-left: 0.5em; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 13px; color: var(--ink-2); margin-bottom: 4px; }
+.sw { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
+.sw.term { background: var(--term); }
+.sw.result { background: var(--result); }
+.sw.neighbour { background: var(--neighbour); }
+.sw.path { background: var(--ink-2); }
+svg.plot { display: block; width: 100%; height: auto; background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; }
+.plot .axis { stroke: var(--rule); stroke-width: 1; }
+.plot .arrow { stroke: var(--ink-2); stroke-width: 2; }
+.plot .arrowhead { fill: var(--ink-2); }
+.plot .hit { fill: transparent; }
+.plot .dot { stroke: var(--surface); stroke-width: 2; }
+.plot .term .dot, .plot .word .dot { fill: var(--term); }
+.plot .result .dot { fill: var(--result); }
+.plot .neighbour .dot { fill: var(--neighbour); }
+.plot .path .dot { fill: var(--ink-2); }
+.plot .label { fill: var(--ink); font-size: 12px; paint-order: stroke; stroke: var(--surface); stroke-width: 3px; }
+.plot .neighbour .label, .plot .path .label { fill: var(--ink-2); }
+.plot .axis-title { fill: var(--ink-2); font-size: 12px; }
+.plot .clickable { cursor: pointer; }

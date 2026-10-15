@@ -102,3 +102,22 @@ the morphological ones); there is no Ukrainian similarity set.
 Analogy accuracy uses 3CosAdd over the full vocabulary (not the common top-30k restriction), so numbers are not
 directly comparable to published Google-analogy figures. After a resume, `metrics.jsonl` may contain repeated
 steps; keep the last record per step.
+
+## Web explorer
+
+`web/` is a static page (<https://zhigamason.github.io/datalab/>) that downloads one int8 table
+from the Hugging Face repo on demand and runs everything in the browser: word arithmetic with
+k nearest neighbours and a PCA map, and a 2D projection onto two word/expression axes. It reads
+`embeddings_int8` and `row_scales` straight from `model_int8.onnx` with a small protobuf reader,
+so it needs no ONNX runtime. It has no runtime dependencies.
+
+```bash
+cd web
+npm install
+npm run dev                          # http://localhost:5173/datalab/
+npm test                             # unit tests; LIVE=1 npm test also checks the published en d300 model
+uv run python -m scripts.make_web_fixture   # from word2vec/, regenerates test/fixtures/tiny.onnx
+```
+
+`.github/workflows/pages.yml` builds and deploys it on every push to `main` that touches `word2vec/web/`.
+One-time setup: in the GitHub repo settings, under Pages → Build and deployment → Source, choose **GitHub Actions**.

@@ -1,11 +1,13 @@
 #!/bin/bash
 # Train one run inside a PBS job: stage data to WORK, train under a time budget, copy the run dir back atomically.
-# Env: W2V_LANG MODE JEPA(0/1) DIM SEED [WINDOW] [EPOCHS] [TRAIN_BUDGET] WORK (per-run scratch dir); jobs/config.sh sourced by caller.
+# Env: W2V_LANG MODE JEPA(0/1) DIM SEED [WINDOW] [EPOCHS] [TRAIN_BUDGET] [TRAIN_ARGS] WORK (per-run scratch dir);
+# TRAIN_ARGS = extra w2v.train flags, space-separated (e.g. "--lambda-emb 0.3"); jobs/config.sh sourced by caller.
 set -euo pipefail
 : "${W2V_LANG:?}" "${MODE:?}" "${DIM:?}" "${SEED:?}" "${WORK:?}"
 JEPA_FLAG=()
 SUFFIX=""
 if [[ "${JEPA:-0}" == 1 ]]; then JEPA_FLAG=(--jepa); SUFFIX="-jepa"; fi
+read -r -a EXTRA <<< "${TRAIN_ARGS:-}"
 WINDOW=${WINDOW:-5}
 NAME="${W2V_LANG}-${MODE}${SUFFIX}-d${DIM}-w${WINDOW}-s${SEED}"  # mirrors w2v.train.run_name
 
@@ -36,7 +38,7 @@ TRAIN_BUDGET=${TRAIN_BUDGET:-50m}
 rc=0
 timeout --signal=TERM --kill-after=2m "$TRAIN_BUDGET" "$UV_PROJECT_ENVIRONMENT/bin/python" -m w2v.train \
     --lang "$W2V_LANG" --mode "$MODE" "${JEPA_FLAG[@]}" --dim "$DIM" --window "$WINDOW" --seed "$SEED" \
-    --epochs "${EPOCHS:-1}" --data-dir "$D" --run-dir "$WORK/runs/$NAME" || rc=$?
+    --epochs "${EPOCHS:-1}" --data-dir "$D" --run-dir "$WORK/runs/$NAME" "${EXTRA[@]}" || rc=$?
 if (( rc != 0 )); then
     echo "[$(date +%T)] $NAME stopped (exit $rc): budget $TRAIN_BUDGET or error; resubmit to resume from ckpt.pt" >&2
     exit "$rc"

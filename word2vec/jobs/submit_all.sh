@@ -3,6 +3,8 @@
 #   LANGS="en cs uk" DIMS="100 300" WINDOWS="5 10" SEEDS="0 1" EPOCHS=1 SKIP_PREP=0 jobs/submit_all.sh
 # Longer training into a separate runs dir (run names do not encode epochs; TRAIN_BUDGET caps each run):
 #   W2V_RUNS=$W2V_STORAGE/runs_e5 EPOCHS=5 TRAIN_BUDGET=2h RUNS_PER_JOB=8 SKIP_PREP=1 jobs/submit_all.sh
+# Extra training flags (no commas: qsub -v splits on them):
+#   VARIANTS="bidir-jepa causal-jepa" TRAIN_ARGS="--lambda-emb 0.3" W2V_RUNS=... jobs/submit_all.sh
 # Prep modes: default = download -> preprocess -> vocab/encode; VOCAB_ONLY=1 = only vocab/encode (re-encode
 # existing text, e.g. after changing W2V_PAD); SKIP_PREP=1 = training only.
 # CPU_SELECT="select=1:ncpus=8:mem=16gb:cl_haldan=True" overrides the resources of every CPU job (pin clusters).
@@ -15,6 +17,7 @@ WINDOWS=${WINDOWS:-5}
 SEEDS=${SEEDS:-0}
 EPOCHS=${EPOCHS:-1}
 TRAIN_BUDGET=${TRAIN_BUDGET:-50m}  # per run; resubmitting resumes runs that hit it
+TRAIN_ARGS=${TRAIN_ARGS:-}  # extra w2v.train flags for every run, e.g. "--lambda-emb 0.3"
 VARIANTS=${VARIANTS:-"bidir causal bidir-jepa causal-jepa"}
 SKIP_PREP=${SKIP_PREP:-0}
 VOCAB_ONLY=${VOCAB_ONLY:-0}
@@ -63,7 +66,7 @@ fi
 submit_dgx() {  # $1 = lang, rest = runs
     local L=$1; shift
     local id
-    id=$(qsub "${DEP[@]}" -N "w2v-$L-dgx" -v RUNS="$(IFS=+; echo "$*")",EPOCHS="$EPOCHS",W2V_RUNS="$W2V_RUNS",TRAIN_BUDGET="$TRAIN_BUDGET" \
+    id=$(qsub "${DEP[@]}" -N "w2v-$L-dgx" -v RUNS="$(IFS=+; echo "$*")",EPOCHS="$EPOCHS",W2V_RUNS="$W2V_RUNS",TRAIN_BUDGET="$TRAIN_BUDGET",TRAIN_ARGS="$TRAIN_ARGS" \
         jobs/train_dgx.pbs)
     echo "train $L ($# runs on gpu_dgx): $id"
 }
@@ -90,7 +93,7 @@ for L in $LANGS; do
                         RUNS+=("$L/$V/$D/$W/$S")
                     else
                         id=$(qsub "${DEP[@]}" -N "w2v-$L-$V-d$D-w$W-s$S" \
-                            -v W2V_LANG="$L",MODE="$MODE",JEPA="$JEPA",DIM="$D",WINDOW="$W",SEED="$S",EPOCHS="$EPOCHS",W2V_RUNS="$W2V_RUNS",TRAIN_BUDGET="$TRAIN_BUDGET" \
+                            -v W2V_LANG="$L",MODE="$MODE",JEPA="$JEPA",DIM="$D",WINDOW="$W",SEED="$S",EPOCHS="$EPOCHS",W2V_RUNS="$W2V_RUNS",TRAIN_BUDGET="$TRAIN_BUDGET",TRAIN_ARGS="$TRAIN_ARGS" \
                             jobs/train.pbs)
                         echo "train $L $V d$D w$W s$S: $id"
                     fi

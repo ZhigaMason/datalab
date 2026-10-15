@@ -98,3 +98,34 @@ def test_vicreg_terms_fp32_under_autocast():
         var_l, cov_l = vicreg_terms(torch.randn(256, 8))
     assert var_l.dtype == torch.float32
     assert cov_l.dtype == torch.float32
+
+
+def test_jepa_loss_regularizes_embeddings_when_asked():
+    torch.manual_seed(0)
+    pred, tgt = torch.randn(1, 64, 8), torch.randn(1, 64, 8)
+    valid = torch.ones(1, 64, dtype=torch.bool)
+    emb = torch.ones(1, 64, 8, requires_grad=True)  # collapsed rows: var hinge is maximal
+    torch.manual_seed(0)
+    base, parts0 = jepa_loss(pred, tgt, valid, 1.0, 0.04, 32)
+    torch.manual_seed(0)
+    base2, _ = jepa_loss(pred, tgt, valid, 1.0, 0.04, 32, emb=emb, lambda_emb=0.0)
+    assert set(parts0) == {"loss_cos", "loss_var", "loss_cov"}
+    torch.testing.assert_close(base, base2)
+    torch.manual_seed(0)
+    loss, parts = jepa_loss(pred, tgt, valid, 1.0, 0.04, 32, emb=emb, lambda_emb=0.5)
+    assert parts["loss_var_emb"].item() == pytest.approx(1.0 - 1e-2, abs=1e-3)  # sqrt(0 + 1e-4) = 0.01
+    torch.testing.assert_close(loss, base + 0.5 * (parts["loss_var_emb"] + 0.04 * parts["loss_cov_emb"]))
+    e = torch.randn(1, 64, 8, requires_grad=True)
+    jepa_loss(pred, tgt, valid, 1.0, 0.04, 32, emb=e * 0.01, lambda_emb=1.0)[0].backward()
+    assert e.grad.abs().sum() > 0
+
+
+def test_model_jepa_lambda_emb_sends_vicreg_grads_to_embeddings():
+    torch.manual_seed(0)
+    model = W2V(30, 8, window=2, mode="bidir", jepa=True)
+    x = torch.randint(2, 30, (2, 12))
+    m = torch.ones(2, 12, dtype=torch.bool)
+    loss, parts = model.loss(x, m, None, n_vicreg=16, lambda_emb=1.0)
+    assert {"loss_var_emb", "loss_cov_emb"} <= set(parts)
+    loss.backward()
+    assert model.emb.weight.grad[x.unique()].abs().sum() > 0

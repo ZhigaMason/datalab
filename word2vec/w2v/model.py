@@ -9,6 +9,7 @@ from w2v.data import PAD_ID
 from w2v.losses import jepa_loss, ns_loss
 
 MODES = ("bidir", "causal")
+PREDICTORS = ("linear", "identity")
 
 
 def context_kernel(window: int, mode: str) -> torch.Tensor:
@@ -23,7 +24,7 @@ def context_kernel(window: int, mode: str) -> torch.Tensor:
 
 
 class W2V(nn.Module):
-    def __init__(self, vocab_size: int, dim: int, window: int, mode: str, jepa: bool):
+    def __init__(self, vocab_size: int, dim: int, window: int, mode: str, jepa: bool, predictor: str = "linear"):
         super().__init__()
         self.dim, self.window, self.mode, self.jepa = dim, window, mode, jepa
         self.emb = nn.Embedding(vocab_size, dim, padding_idx=PAD_ID)
@@ -34,7 +35,10 @@ class W2V(nn.Module):
         self.register_buffer("kernel", kernel, persistent=False)
         self.register_buffer("support", (kernel > 0).float(), persistent=False)
         if jepa:
-            self.predictor = nn.Linear(dim, dim, bias=False)
+            if predictor not in PREDICTORS:
+                raise ValueError(f"predictor must be one of {PREDICTORS}, got {predictor!r}")
+            # identity: the predictor cannot rescale, so the VICReg terms on pred act on the context average of E
+            self.predictor = nn.Linear(dim, dim, bias=False) if predictor == "linear" else nn.Identity()
             self.emb_ema = nn.Embedding(vocab_size, dim, padding_idx=PAD_ID)
             self.emb_ema.weight.data.copy_(self.emb.weight.data)
             self.emb_ema.weight.requires_grad_(False)
@@ -54,12 +58,14 @@ class W2V(nn.Module):
     def update_ema(self, tau: float) -> None:
         self.emb_ema.weight.lerp_(self.emb.weight, 1.0 - tau)
 
-    def loss(self, x, m, negatives=None, lambda_var: float = 1.0, lambda_cov: float = 0.04, n_vicreg: int = 2048):
+    def loss(self, x, m, negatives=None, lambda_var: float = 1.0, lambda_cov: float = 0.04, n_vicreg: int = 2048,
+             lambda_emb: float = 0.0):
         """Returns (scalar loss, dict of detached parts). Loss positions: real target with >= 1 context token."""
         ctx, has_ctx = self.context(x, m)
         valid = m & has_ctx
         if self.jepa:
             with torch.no_grad():
                 tgt = self.emb_ema(x)
-            return jepa_loss(self.predictor(ctx), tgt, valid, lambda_var, lambda_cov, n_vicreg)
+            emb = self.emb(x) if lambda_emb > 0 else None
+            return jepa_loss(self.predictor(ctx), tgt, valid, lambda_var, lambda_cov, n_vicreg, emb, lambda_emb)
         return ns_loss(ctx, x, valid, self.out.weight, negatives)

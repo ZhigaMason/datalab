@@ -19,10 +19,11 @@ from w2v.data import TokenStream, Vocab, keep_probs, noise_dist, sample_mask
 from w2v.evaluate import evaluate_all, load_benchmarks
 from w2v.export import export_onnx, load_onnx_embeddings, verify_onnx, write_vec
 from w2v.losses import normalized_std
-from w2v.model import MODES, W2V
+from w2v.model import MODES, PREDICTORS, W2V
 
 CONFIG_KEYS = ("lang", "mode", "jepa", "dim", "window", "neg", "subsample_t", "lr", "warmup_frac", "batch",
-               "seq_len", "epochs", "max_steps", "ema_start", "lambda_var", "lambda_cov", "n_vicreg", "seed")
+               "seq_len", "epochs", "max_steps", "ema_start", "lambda_var", "lambda_cov", "n_vicreg", "seed",
+               "lambda_emb", "predictor")
 COLLAPSE_STD = 1e-3
 
 
@@ -60,6 +61,9 @@ def parse_args(argv=None) -> argparse.Namespace:
     p.add_argument("--lambda-var", type=float, default=1.0)
     p.add_argument("--lambda-cov", type=float, default=0.04)
     p.add_argument("--n-vicreg", type=int, default=2048)
+    p.add_argument("--predictor", choices=PREDICTORS, default="linear", help="JEPA predictor")
+    p.add_argument("--lambda-emb", type=float, default=0.0,
+                   help="JEPA: also apply the VICReg terms (x this weight) to the online target embeddings")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--log-every", type=int, default=50)
     p.add_argument("--eval-every", type=int, default=1000, help="0 disables periodic evaluation")
@@ -122,7 +126,7 @@ def train(args) -> Path:
     _prepare_run_dir(args, run_dir, config)
 
     torch.manual_seed(args.seed)
-    model = W2V(len(vocab), args.dim, args.window, args.mode, args.jepa).to(device)
+    model = W2V(len(vocab), args.dim, args.window, args.mode, args.jepa, args.predictor).to(device)
     decay = [p for n, p in model.named_parameters() if p.requires_grad and n.startswith("predictor.")]
     no_decay = [p for n, p in model.named_parameters() if p.requires_grad and not n.startswith("predictor.")]
     opt = torch.optim.AdamW([{"params": no_decay, "weight_decay": 0.0}, {"params": decay, "weight_decay": 0.01}],
@@ -161,7 +165,8 @@ def train(args) -> Path:
             m = sample_mask(x, keep)
             negs = None if args.jepa else torch.multinomial(noise, args.neg, replacement=True)
             with torch.autocast(device.type, dtype=torch.bfloat16, enabled=device.type == "cuda"):
-                loss, parts = loss_fn(x, m, negs, args.lambda_var, args.lambda_cov, args.n_vicreg)
+                loss, parts = loss_fn(x, m, negs, args.lambda_var, args.lambda_cov, args.n_vicreg,
+                                        args.lambda_emb)
             opt.zero_grad(set_to_none=True)
             loss.backward()
             opt.step()

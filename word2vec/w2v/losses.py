@@ -34,14 +34,25 @@ def vicreg_terms(z: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     return var_loss, cov_loss
 
 
-def jepa_loss(pred, tgt, valid, lambda_var: float, lambda_cov: float, n_vicreg: int):
-    """pred (B,T,d) predictor output, tgt (B,T,d) EMA target embeddings (no grad)."""
+def jepa_loss(pred, tgt, valid, lambda_var: float, lambda_cov: float, n_vicreg: int,
+              emb=None, lambda_emb: float = 0.0):
+    """pred (B,T,d) predictor output, tgt (B,T,d) EMA target embeddings (no grad).
+
+    With lambda_emb > 0, the same VICReg terms are also applied to emb (B,T,d), the online embeddings of the
+    targets, weighted by lambda_emb: the table is both input and target, so without this it can drift toward
+    a shared direction that makes every target easy to predict.
+    """
     loss_cos = masked_mean(1.0 - F.cosine_similarity(pred.float(), tgt.float(), dim=-1), valid)
     weights = valid.flatten().float() + 1e-12  # never all-zero, keeps shapes static
     idx = torch.multinomial(weights, n_vicreg, replacement=True)
     var_l, cov_l = vicreg_terms(pred.flatten(0, 1)[idx])
     loss = loss_cos + lambda_var * var_l + lambda_cov * cov_l
-    return loss, {"loss_cos": loss_cos.detach(), "loss_var": var_l.detach(), "loss_cov": cov_l.detach()}
+    parts = {"loss_cos": loss_cos.detach(), "loss_var": var_l.detach(), "loss_cov": cov_l.detach()}
+    if lambda_emb > 0:
+        var_e, cov_e = vicreg_terms(emb.flatten(0, 1)[idx])
+        loss = loss + lambda_emb * (lambda_var * var_e + lambda_cov * cov_e)
+        parts.update(loss_var_emb=var_e.detach(), loss_cov_emb=cov_e.detach())
+    return loss, parts
 
 
 def normalized_std(z: torch.Tensor) -> torch.Tensor:

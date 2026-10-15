@@ -98,3 +98,12 @@ def test_non_jepa_out_is_zero_initialized():
 def test_jepa_predictor_has_no_bias():
     model = W2V(30, 8, 3, "bidir", True)
     assert model.predictor.bias is None
+
+
+def test_jepa_identity_predictor_has_no_parameters():
+    model = W2V(30, 8, 3, "bidir", True, predictor="identity")
+    assert not any(n.startswith("predictor.") for n, _ in model.named_parameters())
+    ctx = torch.randn(2, 5, 8)
+    torch.testing.assert_close(model.predictor(ctx), ctx)
+    with pytest.raises(ValueError):
+        W2V(30, 8, 3, "bidir", True, predictor="mlp")

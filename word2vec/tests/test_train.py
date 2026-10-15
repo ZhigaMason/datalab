@@ -106,3 +106,12 @@ def test_missing_benchmarks_fail_fast(tiny_data):
     with pytest.warns(UserWarning):
         out = train(_args(tiny_data, "--run-dir", str(run_dir), "--allow-no-benchmarks"))
     assert (out / "model.onnx").exists()
+
+
+def test_jepa_identity_predictor_and_lambda_emb_train(tiny_data):
+    run_dir = train(_args(tiny_data, "--predictor", "identity", "--lambda-emb", "1.0", jepa=True))
+    cfg = json.loads((run_dir / "config.json").read_text())
+    assert cfg["predictor"] == "identity" and cfg["lambda_emb"] == 1.0
+    recs = [json.loads(l) for l in (run_dir / "metrics.jsonl").read_text().splitlines()]
+    assert any("loss_var_emb" in r for r in recs)
+    assert (run_dir / "final_metrics.json").exists()

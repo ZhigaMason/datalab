@@ -1,7 +1,7 @@
 # Sourced by every job script. Edit W2V_STORAGE for your account.
 export W2V_STORAGE="${W2V_STORAGE:-/storage/brno12-cerit/home/$USER/w2v}"
 export W2V_DATA="$W2V_STORAGE/data"
-export W2V_RUNS="$W2V_STORAGE/runs"
+export W2V_RUNS="${W2V_RUNS:-$W2V_STORAGE/runs}"  # override for a separate grid, e.g. longer training
 export UV_CACHE_DIR="$W2V_STORAGE/.uv-cache"
 export UV_PYTHON_INSTALL_DIR="$W2V_STORAGE/.uv-python"
 export UV_PROJECT_ENVIRONMENT="$W2V_STORAGE/.venv"

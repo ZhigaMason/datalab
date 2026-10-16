@@ -63,3 +63,12 @@ svg.plot { display: block; width: 100%; height: auto; background: var(--surface)
 .plot .axis-end { fill: var(--ink-2); font-size: 13px; font-weight: 600; paint-order: stroke; stroke: var(--surface); stroke-width: 3px; }
 .axis-name { width: 3.5em; }
 #projection input[type='text'] { flex: 1 1 180px; }
+#tutorial { background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 8px 16px; margin: 0 0 16px; }
+#tutorial summary { cursor: pointer; font-weight: 600; }
+#tutorial ol { padding-left: 1.4em; }
+#tutorial li { margin-bottom: 6px; }
+.chips { display: block; margin-top: 4px; color: var(--ink-2); }
+.chip { font: inherit; font-size: 13px; padding: 1px 8px; margin: 2px 2px 0 0; border: 1px solid var(--rule); border-radius: 999px; background: var(--surface); color: var(--ink); cursor: pointer; }
+.foreign-note { display: none; color: var(--ink-2); }
+#tutorial.foreign .chips { display: none; }
+#tutorial.foreign .foreign-note { display: block; }

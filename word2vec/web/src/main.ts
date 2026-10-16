@@ -71,6 +71,7 @@ async function onLoad(): Promise<void> {
     if (modelLang !== spec.lang) {
       fillDefaults(spec.lang)
       modelLang = spec.lang
+      $('tutorial').classList.toggle('foreign', spec.lang !== 'en') // the tutorial's examples are English
     }
     $<HTMLFieldSetElement>('editor').disabled = false
     $<HTMLFieldSetElement>('projection').disabled = false
@@ -222,5 +223,19 @@ $('metric').addEventListener('change', runEditor)
 $('plot').addEventListener('click', runProjection)
 for (const id of ['xaxis-neg', 'xaxis-pos', 'yaxis-neg', 'yaxis-pos']) $(id).addEventListener('keydown', (e) => e.key === 'Enter' && runProjection())
 $('ortho').addEventListener('change', runProjection)
+for (const chip of document.querySelectorAll<HTMLButtonElement>('#tutorial .chip')) {
+  chip.addEventListener('click', () => {
+    const { expr, axes, words } = chip.dataset
+    if (expr !== undefined) {
+      $<HTMLInputElement>('expr').value = expr
+      runEditor()
+    }
+    if (axes !== undefined) {
+      ;['xaxis-neg', 'xaxis-pos', 'yaxis-neg', 'yaxis-pos'].forEach((id, i) => ($<HTMLInputElement>(id).value = axes.split('|')[i]))
+      if (words !== undefined) $<HTMLTextAreaElement>('words').value = words
+      runProjection()
+    }
+  })
+}
 fillDefaults('en')
 updateSize()

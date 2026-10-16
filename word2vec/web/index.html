@@ -15,6 +15,41 @@
       </p>
     </header>
 
+    <details id="tutorial" open>
+      <summary>How to use</summary>
+      <p>
+        Every word is a vector learned from Wikipedia: words used in similar contexts end up close together,
+        and some relations become directions you can add and subtract.
+      </p>
+      <ol>
+        <li>
+          <b>Load a model.</b> Pick a language and press <i>Load</i>. Dim 64 (≈ 14 MB) is a good start; ⚠ marks
+          large downloads. Objective, context and window pick between training variants of the same data.
+        </li>
+        <li>
+          <b>Vector arithmetic.</b> Type an expression and press Enter to see its nearest words and a map of
+          them. Use + and − with spaces, weights like <code>0.5*paris</code>, and <code>0</code> for the zero
+          vector. <i>cosine</i> compares directions only; <i>L2</i> compares the stored vectors, whose length
+          tracks how frequent a word is. Click a neighbour to add it.
+          <span class="chips">Try:
+            <button class="chip" data-expr="king - man + woman">king − man + woman</button>
+            <button class="chip" data-expr="paris - france + italy">paris − france + italy</button>
+            <button class="chip" data-expr="walking - walk + swim">walking − walk + swim</button>
+          </span>
+        </li>
+        <li>
+          <b>2D projection.</b> Each axis runs from one word (or expression) to another, e.g. man ⟷ woman;
+          each listed word is placed by how far it leans toward either end. <i>make y ⊥ x</i> removes from the
+          y axis whatever it shares with x.
+          <span class="chips">Try:
+            <button class="chip" data-axes="man|woman|poor|rich" data-words="king queen prince princess doctor nurse engineer teacher beggar billionaire">man ⟷ woman / poor ⟷ rich</button>
+            <button class="chip" data-axes="small|big|bad|good" data-words="mouse cat dog horse elephant whale ant virus storm war gift">small ⟷ big / bad ⟷ good</button>
+          </span>
+        </li>
+      </ol>
+      <p class="foreign-note">The examples are in English; the boxes below already hold equivalent examples for this language.</p>
+    </details>
+
     <section id="picker">
       <div class="row">
         <label>Language

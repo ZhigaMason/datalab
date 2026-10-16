@@ -12,7 +12,10 @@
 # with HF_HUB_DISABLE_XET=1 (classic LFS upload instead of the Xet backend).
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# config.sh points HF_HOME at storage (dataset cache), where no login token lives; keep the caller's login.
+caller_hf_home=${HF_HOME-__unset__}
 source jobs/config.sh
+if [[ $caller_hf_home == __unset__ ]]; then unset HF_HOME; else export HF_HOME=$caller_hf_home; fi
 REPO=${1:?usage: scripts/hf_upload.sh user/repo [RUNS_DIR SUBDIR]}
 RUNS=${2:-$W2V_RUNS}
 SUBDIR=${3:-}

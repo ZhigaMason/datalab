@@ -1,29 +1,37 @@
 #!/bin/bash
-# Publish the grid's ONNX tables (int8 + fp16) to a Hugging Face model repo. Run on a MetaCentrum node,
-# in a shell where `hf auth whoami` shows your account, after scripts.quantize_onnx has converted every run:
-#   PYTHONUNBUFFERED=1 bash scripts/hf_upload.sh user/repo 2>&1 | tee "$W2V_STORAGE/hf_upload.log"
-# Files are staged as hard links in $W2V_STORAGE/hf_stage (no extra space): one directory per run with
-# model_int8.onnx, model_fp16.onnx, config.json and final_metrics*.json, plus vocab/<lang>.json (one per
-# language; every run of a language must share it) and scripts/hf_model_card.md as README.md.
+# Publish a grid's ONNX tables to a Hugging Face model repo. Run on a MetaCentrum node, in a shell where
+# `hf auth whoami` shows your account:
+#   PYTHONUNBUFFERED=1 bash scripts/hf_upload.sh user/repo [RUNS_DIR SUBDIR] 2>&1 | tee "$W2V_STORAGE/hf_upload.log"
+# Without RUNS_DIR/SUBDIR: $W2V_RUNS goes to the repo root (the 1-epoch grid). With them: RUNS_DIR goes to
+# SUBDIR/ in the repo (e.g. runs_e5 -> e5/). Each run directory gets model_int8.onnx, model_fp16.onnx when the
+# run has one (runs converted by scripts.quantize_onnx), config.json, final_metrics*.json and metrics.jsonl.
+# vocab/<lang>.json is shared by all grids: every run of a language must have the same vocabulary.
+# scripts/hf_model_card.md becomes README.md. Files are staged as hard links (no extra space) in
+# $W2V_STORAGE/hf_stage[_SUBDIR], mirroring the repo layout; the upload only adds or updates files.
 # STAGE_ONLY=1 stops after staging. Re-running resumes the upload. If it sends nothing for minutes, retry
 # with HF_HUB_DISABLE_XET=1 (classic LFS upload instead of the Xet backend).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 source jobs/config.sh
-REPO=${1:?usage: scripts/hf_upload.sh user/repo}
-STAGE=$W2V_STORAGE/hf_stage
+REPO=${1:?usage: scripts/hf_upload.sh user/repo [RUNS_DIR SUBDIR]}
+RUNS=${2:-$W2V_RUNS}
+SUBDIR=${3:-}
+if [[ -n ${2:-} && -z $SUBDIR ]]; then echo "RUNS_DIR needs a SUBDIR" >&2; exit 1; fi
+STAGE=$W2V_STORAGE/hf_stage${SUBDIR:+_$SUBDIR}
+DEST=$STAGE${SUBDIR:+/$SUBDIR}
 
-rm -rf "$STAGE/vocab"; find "$STAGE" -mindepth 1 -maxdepth 1 -name '*-s*' -exec rm -rf {} + 2>/dev/null || true
-mkdir -p "$STAGE/vocab"  # keeps $STAGE/.cache/huggingface: the upload state of an interrupted run
-for r in "$W2V_RUNS"/*-s[0-9]*; do
+rm -rf "$STAGE/vocab"; find "$DEST" -mindepth 1 -maxdepth 1 -name '*-s*' -exec rm -rf {} + 2>/dev/null || true
+mkdir -p "$STAGE/vocab" "$DEST"  # keeps $STAGE/.cache/huggingface: the upload state of an interrupted run
+for r in "$RUNS"/*-s[0-9]*; do
     n=$(basename "$r")
-    [[ -f $r/model.onnx && -f $r/model_fp16.onnx ]] || { echo "skip $n: needs int8 model.onnx and model_fp16.onnx"; continue; }
-    mkdir -p "$STAGE/$n"
-    ln "$r/model.onnx" "$STAGE/$n/model_int8.onnx"
-    ln "$r/model_fp16.onnx" "$STAGE/$n/model_fp16.onnx"
-    for f in config.json final_metrics.json final_metrics_int8.json; do
-        if [[ -f $r/$f ]]; then ln "$r/$f" "$STAGE/$n/$f"; fi
+    [[ -f $r/model.onnx && -f $r/final_metrics.json ]] || { echo "skip $n: not finished"; continue; }
+    if [[ -z $SUBDIR && ! -f $r/model_fp16.onnx ]]; then echo "skip $n: root grid needs model_fp16.onnx"; continue; fi
+    mkdir -p "$DEST/$n"
+    ln "$r/model.onnx" "$DEST/$n/model_int8.onnx"
+    for f in model_fp16.onnx config.json final_metrics.json final_metrics_int8.json; do
+        if [[ -f $r/$f ]]; then ln "$r/$f" "$DEST/$n/$f"; fi
     done
+    if [[ -n $SUBDIR && -f $r/metrics.jsonl ]]; then ln "$r/metrics.jsonl" "$DEST/$n/metrics.jsonl"; fi
     lang=${n%%-*}
     if [[ ! -f $STAGE/vocab/$lang.json ]]; then
         ln "$r/vocab.json" "$STAGE/vocab/$lang.json"
@@ -32,7 +40,7 @@ for r in "$W2V_RUNS"/*-s[0-9]*; do
     fi
 done
 cp scripts/hf_model_card.md "$STAGE/README.md"
-echo "staged $(find "$STAGE" -name '*.onnx' | wc -l) onnx files, $(du -sh "$STAGE" | cut -f1)"
+echo "staged $(find "$DEST" -name '*.onnx' | wc -l) onnx files in ${SUBDIR:-the repo root}, $(du -sh "$STAGE" | cut -f1)"
 
 if [[ ${STAGE_ONLY:-0} == 1 ]]; then exit 0; fi
 hf repo create "$REPO" --repo-type model --exist-ok

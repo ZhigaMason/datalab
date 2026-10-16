@@ -79,14 +79,16 @@ Unknown words are reported in an inline error message. Output:
   PCA fitted on all of them; arrows from origin-term chaining through the signed terms to the
   result (`king → king−man → king−man+woman`), drawn from the summed unit vectors.
 
-**2D projection.** Inputs: x-axis expression, y-axis expression (each a single word or an
-expression, evaluated with `expr.ts` and normalized), a textarea of words (whitespace/comma
-separated), "orthogonalize y against x" checkbox (default on), "Plot". Unknown words are listed
-and skipped. Each word is plotted at `(⟨unit(v), x̂⟩, ⟨unit(v), ŷ⟩)` with its label; axis titles
-show the expressions. Defaults for en: x = `woman - man`, y = `rich - poor`, words =
-`king queen prince princess doctor nurse engineer teacher beggar billionaire`.
-For cs/uk the defaults are equivalent lemmas (cs: `žena - muž`, `bohatý - chudý`; uk:
-`жінка - чоловік`, `багатий - бідний`) with a short word list.
+**2D projection.** Each axis has two inputs, one per end (left/right for x, bottom/top for y).
+Each end is a single word or an expression evaluated with `expr.ts`. The axis vector is
+positive end − negative end (`axisVector`), and one end may be left empty. The other inputs are
+a textarea of words (whitespace/comma separated), an "orthogonalize y against x" checkbox
+(default on) and "Plot". Unknown words are listed and skipped. Each word is plotted at
+`(⟨unit(v), x̂⟩, ⟨unit(v), ŷ⟩)` with its label. The end texts are drawn at the matching ends
+of the origin lines (`← man`, `woman →`, `↑ rich`, `↓ poor`). Defaults for en: x = man ⟷ woman,
+y = poor ⟷ rich, words = `king queen prince princess doctor nurse engineer teacher beggar billionaire`.
+For cs/uk the defaults are equivalent lemmas (cs: muž ⟷ žena, chudý ⟷ bohatý; uk: чоловік ⟷ жінка,
+бідний ⟷ багатий) with a short word list.
 
 ## Error handling
 

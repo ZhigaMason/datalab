@@ -1,4 +1,4 @@
-import { evaluate, ExprError, isZero, splitWords, type Resolved } from './expr'
+import { axisVector, evaluate, ExprError, isZero, splitWords, type Resolved } from './expr'
 import { normalize, pca2, projectAxes } from './geom'
 import { knn } from './knn'
 import { estimateMB, LARGE_MB, loadModel, runName, type Lang, type Model, type RunSpec } from './model'
@@ -8,10 +8,11 @@ import './style.css'
 const $ = <T extends Element = HTMLElement>(id: string) => document.getElementById(id) as unknown as T
 const value = (id: string) => $<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(id).value
 
-const DEFAULTS: Record<Lang, { expr: string; x: string; y: string; words: string }> = {
-  en: { expr: 'king - man + woman', x: 'woman - man', y: 'rich - poor', words: 'king queen prince princess doctor nurse engineer teacher beggar billionaire' },
-  cs: { expr: 'král - muž + žena', x: 'žena - muž', y: 'bohatý - chudý', words: 'král královna princ princezna lékař sestra učitel inženýr žebrák milionář' },
-  uk: { expr: 'король - чоловік + жінка', x: 'жінка - чоловік', y: 'багатий - бідний', words: 'король королева принц принцеса лікар медсестра вчитель інженер жебрак мільйонер' },
+// x and y are [negative end, positive end]
+const DEFAULTS: Record<Lang, { expr: string; x: [string, string]; y: [string, string]; words: string }> = {
+  en: { expr: 'king - man + woman', x: ['man', 'woman'], y: ['poor', 'rich'], words: 'king queen prince princess doctor nurse engineer teacher beggar billionaire' },
+  cs: { expr: 'král - muž + žena', x: ['muž', 'žena'], y: ['chudý', 'bohatý'], words: 'král královna princ princezna lékař sestra učitel inženýr žebrák milionář' },
+  uk: { expr: 'король - чоловік + жінка', x: ['чоловік', 'жінка'], y: ['бідний', 'багатий'], words: 'король королева принц принцеса лікар медсестра вчитель інженер жебрак мільйонер' },
 }
 
 let model: Model | null = null
@@ -39,8 +40,8 @@ function updateSize(): void {
 function fillDefaults(lang: Lang): void {
   const d = DEFAULTS[lang]
   $<HTMLInputElement>('expr').value = d.expr
-  $<HTMLInputElement>('xaxis').value = d.x
-  $<HTMLInputElement>('yaxis').value = d.y
+  ;[$<HTMLInputElement>('xaxis-neg').value, $<HTMLInputElement>('xaxis-pos').value] = d.x
+  ;[$<HTMLInputElement>('yaxis-neg').value, $<HTMLInputElement>('yaxis-pos').value] = d.y
   $<HTMLTextAreaElement>('words').value = d.words
 }
 
@@ -168,11 +169,9 @@ function runEditor(): void {
 
 function axis(m: Model, id: string, name: string): Float32Array {
   try {
-    const r = evaluate(m, value(id))
-    if (isZero(r)) throw new ExprError(`${name} sums to the zero vector`)
-    return r.vector
+    return axisVector(m, value(`${id}-neg`), value(`${id}-pos`))
   } catch (e) {
-    if (e instanceof ExprError && !e.message.startsWith(name)) throw new ExprError(`${name}: ${e.message}`)
+    if (e instanceof ExprError) throw new ExprError(`${name}: ${e.message}`)
     throw e
   }
 }
@@ -202,8 +201,8 @@ function runProjection(): void {
   if (unknown.length) err.textContent = `Not in the vocabulary, skipped: ${unknown.join(', ')}`
   renderPlot(svg, known.map((k, i) => ({ x: xy[i][0], y: xy[i][1], label: k.word, kind: 'word' })), {
     originLines: true,
-    xLabel: value('xaxis'),
-    yLabel: value('yaxis') + (ortho ? ' (⊥ x)' : ''),
+    ends: { left: value('xaxis-neg'), right: value('xaxis-pos'), bottom: value('yaxis-neg'), top: value('yaxis-pos') },
+    yLabel: ortho ? 'made ⊥ x' : undefined,
   })
 }
 
@@ -213,7 +212,7 @@ $('go').addEventListener('click', runEditor)
 $('expr').addEventListener('keydown', (e) => e.key === 'Enter' && runEditor())
 $('k').addEventListener('change', runEditor)
 $('plot').addEventListener('click', runProjection)
-for (const id of ['xaxis', 'yaxis']) $(id).addEventListener('keydown', (e) => e.key === 'Enter' && runProjection())
+for (const id of ['xaxis-neg', 'xaxis-pos', 'yaxis-neg', 'yaxis-pos']) $(id).addEventListener('keydown', (e) => e.key === 'Enter' && runProjection())
 $('ortho').addEventListener('change', runProjection)
 fillDefaults('en')
 updateSize()

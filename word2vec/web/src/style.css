@@ -60,3 +60,6 @@ svg.plot { display: block; width: 100%; height: auto; background: var(--surface)
 .plot .neighbour .label, .plot .path .label { fill: var(--ink-2); }
 .plot .axis-title { fill: var(--ink-2); font-size: 12px; }
 .plot .clickable { cursor: pointer; }
+.plot .axis-end { fill: var(--ink-2); font-size: 13px; font-weight: 600; paint-order: stroke; stroke: var(--surface); stroke-width: 3px; }
+.axis-name { width: 3.5em; }
+#projection input[type='text'] { flex: 1 1 180px; }

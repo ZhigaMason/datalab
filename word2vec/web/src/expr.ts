@@ -56,6 +56,22 @@ export function isZero(r: Resolved): boolean {
   return Math.sqrt(n) <= 1e-4 * scale
 }
 
+/** Axis pointing from the `neg` end to the `pos` end; either end (not both) may be empty. */
+export function axisVector(model: Model, neg: string, pos: string): Float32Array {
+  const vector = new Float32Array(model.dim)
+  const terms: Resolved['terms'] = []
+  ;[neg, pos].forEach((src, i) => {
+    if (!src.trim()) return
+    const r = evaluate(model, src)
+    const sign = i === 0 ? -1 : 1
+    for (let j = 0; j < model.dim; j++) vector[j] += sign * r.vector[j]
+    terms.push(...r.terms)
+  })
+  if (terms.length === 0) throw new ExprError('both ends are empty')
+  if (isZero({ terms, vector })) throw new ExprError('the two ends cancel out to the zero vector')
+  return vector
+}
+
 export function splitWords(src: string): string[] {
   return [...new Set(src.toLowerCase().split(/[\s,]+/).filter(Boolean))]
 }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { evaluate, ExprError, isZero, parse, splitWords } from '../src/expr'
+import { axisVector, evaluate, ExprError, isZero, parse, splitWords } from '../src/expr'
 import { makeModel } from './helpers'
 
 describe('parse', () => {
@@ -74,6 +74,33 @@ describe('isZero', () => {
   test('keeps genuine results', () => {
     expect(isZero(evaluate(m, 'a - b'))).toBe(false)
     expect(isZero({ terms, vector: Float32Array.of(0.01, 0) })).toBe(false)
+  })
+})
+
+describe('axisVector', () => {
+  // unit(a) = (1, 0), unit(b) = (0, 1)
+  const m = makeModel(['<pad>', 'a', 'b'], [[0, 0], [10, 0], [0, 20]])
+
+  test('points from the negative end to the positive end', () => {
+    expect(Array.from(axisVector(m, 'a', 'b'))).toEqual(Array.from(evaluate(m, 'b - a').vector))
+  })
+
+  test('ends may be expressions', () => {
+    expect(Array.from(axisVector(m, 'a', '2*b + a'))).toEqual([0, 2])
+  })
+
+  test('an empty end leaves the other end alone', () => {
+    expect(Array.from(axisVector(m, '  ', 'b'))).toEqual([0, 1])
+    expect(Array.from(axisVector(m, 'a', ''))).toEqual([-1, 0])
+  })
+
+  test('rejects two empty ends and ends that cancel', () => {
+    expect(() => axisVector(m, '', ' ')).toThrow(ExprError)
+    expect(() => axisVector(m, 'a', 'a')).toThrow(/zero vector/)
+  })
+
+  test('names a bad end', () => {
+    expect(() => axisVector(m, 'zzz', 'a')).toThrow('unknown word “zzz”')
   })
 })
 

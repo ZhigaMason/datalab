@@ -20,6 +20,8 @@ export interface PlotOptions {
   yLabel?: string
   /** Draw the x = 0 and y = 0 lines (and keep the origin in view). */
   originLines?: boolean
+  /** Labels for the four ends of the origin lines. */
+  ends?: { left: string; right: string; bottom: string; top: string }
 }
 
 const DRAW_ORDER: Kind[] = ['neighbour', 'word', 'path', 'term', 'result']
@@ -64,6 +66,16 @@ export function renderPlot(svg: SVGSVGElement, points: Point[], opts: PlotOption
   if (opts.originLines) {
     el('line', { x1: sx(0), y1: PAD / 2, x2: sx(0), y2: H - PAD / 2, class: 'axis' }, svg)
     el('line', { x1: PAD / 2, y1: sy(0), x2: W - PAD / 2, y2: sy(0), class: 'axis' }, svg)
+    const end = (word: string, format: (w: string) => string, x: number, y: number, anchor: string) => {
+      if (word.trim()) el('text', { x, y, class: 'axis-end', 'text-anchor': anchor }, svg).textContent = format(word.trim())
+    }
+    const ends = opts.ends
+    if (ends) {
+      end(ends.left, (w) => `← ${w}`, PAD / 2, sy(0) - 6, 'start')
+      end(ends.right, (w) => `${w} →`, W - PAD / 2, sy(0) - 6, 'end')
+      end(ends.top, (w) => `↑ ${w}`, sx(0) + 6, PAD / 2 + 4, 'start')
+      end(ends.bottom, (w) => `↓ ${w}`, sx(0) + 6, H - PAD / 2 + 4, 'start')
+    }
   }
 
   for (const [a, b] of opts.arrows ?? []) {

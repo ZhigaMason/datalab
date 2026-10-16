@@ -71,13 +71,20 @@
     <fieldset id="projection" disabled>
       <legend>2D projection</legend>
       <div class="row">
-        <label for="xaxis">x axis</label>
-        <input id="xaxis" type="text" spellcheck="false" />
+        <span class="axis-name">x axis</span>
+        <input id="xaxis-neg" type="text" spellcheck="false" aria-label="x axis, left end" placeholder="left end" />
+        <span aria-hidden="true">⟷</span>
+        <input id="xaxis-pos" type="text" spellcheck="false" aria-label="x axis, right end" placeholder="right end" />
       </div>
       <div class="row">
-        <label for="yaxis">y axis</label>
-        <input id="yaxis" type="text" spellcheck="false" />
+        <span class="axis-name">y axis</span>
+        <input id="yaxis-neg" type="text" spellcheck="false" aria-label="y axis, bottom end" placeholder="bottom end" />
+        <span aria-hidden="true">⟷</span>
+        <input id="yaxis-pos" type="text" spellcheck="false" aria-label="y axis, top end" placeholder="top end" />
+      </div>
+      <div class="row">
         <label><input id="ortho" type="checkbox" checked /> make y ⊥ x</label>
+        <span class="hint">Each end is a word or an expression; the axis points from the first box to the second. One end may be left empty.</span>
       </div>
       <div class="row">
         <textarea id="words" rows="2" spellcheck="false" aria-label="Words to plot"></textarea>

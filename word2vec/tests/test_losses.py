@@ -88,7 +88,7 @@ def test_model_jepa_loss_grads_skip_ema():
     m = torch.ones(2, 12, dtype=torch.bool)
     loss, parts = model.loss(x, m, None, n_vicreg=16)
     loss.backward()
-    assert set(parts) == {"loss_cos", "loss_var", "loss_cov"}
+    assert set(parts) == {"loss_cos", "loss_var", "loss_cov", "loss_var_emb", "loss_cov_emb"}  # lambda_emb 0.3
     assert model.emb_ema.weight.grad is None
     assert model.emb.weight.grad is not None and model.predictor.weight.grad is not None
 

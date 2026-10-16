@@ -62,8 +62,9 @@ def parse_args(argv=None) -> argparse.Namespace:
     p.add_argument("--lambda-cov", type=float, default=0.04)
     p.add_argument("--n-vicreg", type=int, default=2048)
     p.add_argument("--predictor", choices=PREDICTORS, default="linear", help="JEPA predictor")
-    p.add_argument("--lambda-emb", type=float, default=0.0,
-                   help="JEPA: also apply the VICReg terms (x this weight) to the online target embeddings")
+    p.add_argument("--lambda-emb", type=float, default=0.3,
+                   help="JEPA: also apply the VICReg terms (x this weight) to the online target embeddings; "
+                        "0 = the original objective, whose embedding table collapses toward one direction")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--log-every", type=int, default=50)
     p.add_argument("--eval-every", type=int, default=1000, help="0 disables periodic evaluation")

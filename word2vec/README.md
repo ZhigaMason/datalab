@@ -10,6 +10,12 @@ convolutional context average, trained four ways:
 | `bidir-jepa` | k left + k right | predict EMA target embedding (cosine + VICReg) |
 | `causal-jepa` | k left | predict EMA target embedding (cosine + VICReg) |
 
+JEPA applies the VICReg terms to the predictor output and, with weight `--lambda-emb` (default 0.3), to the
+embedding table itself. Without the second part (`--lambda-emb 0`, the objective of the first grids) the table
+drifts toward one shared direction (mean cosine 0.83 between random words) and analogy accuracy stalls; with it,
+5-epoch en `bidir-jepa` analogy accuracy roughly doubles (0.098 → 0.211 mean over the grid). Removing the linear
+predictor (`--predictor identity`) makes the table collapse completely.
+
 Each run writes `runs/<lang>-<variant>-d<dim>-w<window>-s<seed>/model.onnx`
 (`ids (batch, seq) int64 -> embeddings (batch, seq, dim) float32`), `vocab.json`, `config.json`,
 `metrics.jsonl`, TensorBoard logs and `final_metrics.json`.

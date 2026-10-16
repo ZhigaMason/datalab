@@ -59,7 +59,7 @@ class W2V(nn.Module):
         self.emb_ema.weight.lerp_(self.emb.weight, 1.0 - tau)
 
     def loss(self, x, m, negatives=None, lambda_var: float = 1.0, lambda_cov: float = 0.04, n_vicreg: int = 2048,
-             lambda_emb: float = 0.0):
+             lambda_emb: float = 0.3):
         """Returns (scalar loss, dict of detached parts). Loss positions: real target with >= 1 context token."""
         ctx, has_ctx = self.context(x, m)
         valid = m & has_ctx

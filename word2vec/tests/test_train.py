@@ -115,3 +115,7 @@ def test_jepa_identity_predictor_and_lambda_emb_train(tiny_data):
     recs = [json.loads(l) for l in (run_dir / "metrics.jsonl").read_text().splitlines()]
     assert any("loss_var_emb" in r for r in recs)
     assert (run_dir / "final_metrics.json").exists()
+
+
+def test_jepa_regularizes_the_table_by_default(tmp_path):
+    assert _args(tmp_path, jepa=True).lambda_emb == 0.3

@@ -101,6 +101,10 @@ Single module `W2V(V, dim, k, mode ∈ {bidir, causal}, jepa: bool)`.
   `(1 − cos(pred_t, E_ema(x_t))).mean() + λ_var·var_loss(pred) + λ_cov·cov_loss(pred)`
   (VICReg terms on a random subsample of loss positions; defaults
   `λ_var = 1.0`, `λ_cov = 0.04`).
+  Since 2026-10-16 the loss also adds `λ_emb·(λ_var·var_loss(E(x_t)) + λ_cov·cov_loss(E(x_t)))` on the
+  online embeddings of the same positions, default `λ_emb = 0.3` (`--lambda-emb`). Without it the table
+  collapsed toward one direction (mean row cosine 0.83) and analogy accuracy plateaued; grids trained before
+  this change used `λ_emb = 0`.
 - Collapse monitor logged each log interval: mean per-dimension std of `E` rows
   in the batch and of `pred`. If std < 1e-3, a `collapse_warning` is written to
   metrics; the run continues and still exports.

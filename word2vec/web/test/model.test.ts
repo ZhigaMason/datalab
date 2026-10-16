@@ -40,6 +40,15 @@ describe('Model.fromOnnx', () => {
     expect(u[2]).toBeCloseTo(-0.25 / n, 2)
   })
 
+  test('vector() returns the stored row and sqNorm its squared length', () => {
+    const v = m.vector(2) // weight row [1, 0.5, -0.25]
+    expect(v[0]).toBeCloseTo(1, 2)
+    expect(v[1]).toBeCloseTo(0.5, 2)
+    expect(v[2]).toBeCloseTo(-0.25, 2)
+    expect(m.sqNorm[2]).toBeCloseTo(v[0] ** 2 + v[1] ** 2 + v[2] ** 2, 5)
+    expect(m.sqNorm[0]).toBe(0)
+  })
+
   test('rejects a vocab of the wrong length', () => {
     expect(() => Model.fromOnnx(words.slice(1), buf)).toThrow(/rows/)
   })

@@ -47,6 +47,9 @@
       <div class="row">
         <input id="expr" type="text" spellcheck="false" aria-label="Expression" />
         <label>k <input id="k" type="number" min="1" max="100" value="10" /></label>
+        <label>metric
+          <select id="metric"><option value="cos">cosine</option><option value="l2">L2 (raw vectors)</option></select>
+        </label>
         <button id="go">Go</button>
       </div>
       <p class="hint">

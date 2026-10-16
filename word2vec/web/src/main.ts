@@ -1,6 +1,6 @@
 import { axisVector, evaluate, ExprError, isZero, splitWords, ZERO_ID, type Resolved } from './expr'
 import { normalize, pca2, projectAxes } from './geom'
-import { knn } from './knn'
+import { knn, type Metric } from './knn'
 import { estimateMB, LARGE_MB, loadModel, runName, type Lang, type Model, type RunSpec } from './model'
 import { renderPlot, type Point } from './plot'
 import './style.css'
@@ -17,8 +17,9 @@ const DEFAULTS: Record<Lang, { expr: string; x: [string, string]; y: [string, st
 
 let model: Model | null = null
 
-/** Unit vector of a vocab row, or the zero vector for the word `0`. */
-const termVec = (m: Model, id: number) => (id === ZERO_ID ? new Float32Array(m.dim) : m.unit(id))
+/** Unit (or, when `raw`, stored) vector of a vocab row, or the zero vector for the word `0`. */
+const termVec = (m: Model, id: number, raw = false) =>
+  id === ZERO_ID ? new Float32Array(m.dim) : raw ? m.vector(id) : m.unit(id)
 let modelLang: Lang | null = null
 
 function currentSpec(): RunSpec {
@@ -107,9 +108,11 @@ function runEditor(): void {
   const list = $('neighbours')
   const svg = $<SVGSVGElement>('pca-plot')
   err.textContent = ''
+  const metric = value('metric') as Metric
+  const raw = metric === 'l2' // L2 compares stored vectors; normalized ones would just repeat the cosine ranking
   let res: Resolved
   try {
-    res = evaluate(m, value('expr'))
+    res = evaluate(m, value('expr'), raw)
   } catch (e) {
     if (!(e instanceof ExprError)) throw e
     err.textContent = e.message
@@ -121,9 +124,9 @@ function runEditor(): void {
     renderPlot(svg, [])
     return
   }
-  const result = normalize(res.vector)
+  const result = raw ? res.vector : normalize(res.vector)
   const k = Math.min(100, Math.max(1, Math.round(Number(value('k'))) || 10))
-  const nbs = knn(m, res.vector, k, new Set(res.terms.map((t) => t.id)))
+  const nbs = knn(m, res.vector, k, new Set(res.terms.map((t) => t.id)), metric)
 
   list.replaceChildren(
     ...nbs.map((nb) => {
@@ -132,6 +135,7 @@ function runEditor(): void {
       const s = document.createElement('span')
       b.textContent = nb.word
       b.title = `add + ${nb.word}`
+      s.title = metric === 'l2' ? 'L2 distance (lower is closer)' : 'cosine similarity'
       b.addEventListener('click', () => addTerm(nb.word))
       s.className = 'score'
       s.textContent = nb.score.toFixed(3)
@@ -140,7 +144,7 @@ function runEditor(): void {
     }),
   )
 
-  // PCA map of unit vectors: input words, partial sums, the result and its neighbours.
+  // PCA map of unit (cosine) or stored (L2) vectors: input words, partial sums, the result and its neighbours.
   const vecs: Float32Array[] = []
   const pts: Omit<Point, 'x' | 'y'>[] = []
   const add = (v: Float32Array, p: Omit<Point, 'x' | 'y'>) => {
@@ -152,18 +156,18 @@ function runEditor(): void {
   for (const t of res.terms) {
     if (seen.has(t.id)) continue
     seen.add(t.id)
-    add(termVec(m, t.id), { label: t.word, kind: 'term' })
+    add(termVec(m, t.id, raw), { label: t.word, kind: 'term' })
   }
   const chain = [0] // first term → each partial sum → result
   const acc = new Float32Array(m.dim)
   res.terms.forEach((t, i) => {
-    const u = termVec(m, t.id)
+    const u = termVec(m, t.id, raw)
     for (let j = 0; j < m.dim; j++) acc[j] += t.coef * u[j]
-    if (i > 0 && i < res.terms.length - 1) chain.push(add(normalize(acc), { label: formatPrefix(res.terms, i + 1), kind: 'path' }))
+    if (i > 0 && i < res.terms.length - 1) chain.push(add(raw ? Float32Array.from(acc) : normalize(acc), { label: formatPrefix(res.terms, i + 1), kind: 'path' }))
   })
   const r = add(result, { label: 'result', kind: 'result' })
   if (res.terms.length > 1) chain.push(r)
-  for (const nb of nbs) add(m.unit(nb.id), { label: nb.word, kind: 'neighbour', onClick: () => addTerm(nb.word) })
+  for (const nb of nbs) add(termVec(m, nb.id, raw), { label: nb.word, kind: 'neighbour', onClick: () => addTerm(nb.word) })
 
   const xy = pca2(vecs)
   const arrows = chain.slice(1).map((b, i) => [chain[i], b] as [number, number])
@@ -214,6 +218,7 @@ $('load').addEventListener('click', onLoad)
 $('go').addEventListener('click', runEditor)
 $('expr').addEventListener('keydown', (e) => e.key === 'Enter' && runEditor())
 $('k').addEventListener('change', runEditor)
+$('metric').addEventListener('change', runEditor)
 $('plot').addEventListener('click', runProjection)
 for (const id of ['xaxis-neg', 'xaxis-pos', 'yaxis-neg', 'yaxis-pos']) $(id).addEventListener('keydown', (e) => e.key === 'Enter' && runProjection())
 $('ortho').addEventListener('change', runProjection)

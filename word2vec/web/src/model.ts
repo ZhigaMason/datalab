@@ -27,6 +27,8 @@ export class Model {
   readonly index = new Map<string, number>()
   /** 1 / L2 norm of each dequantized row (0 for all-zero rows). */
   readonly invNorm: Float32Array
+  /** Squared L2 norm of each dequantized row. */
+  readonly sqNorm: Float32Array
   /** 1 for special tokens such as <pad>, which are never neighbours. */
   readonly special: Uint8Array
 
@@ -39,6 +41,7 @@ export class Model {
     const V = words.length
     if (q.length !== V * dim || scales.length !== V) throw new Error(`table shape does not match ${V} words × ${dim}`)
     this.invNorm = new Float32Array(V)
+    this.sqNorm = new Float32Array(V)
     this.special = new Uint8Array(V)
     for (let i = 0; i < V; i++) {
       const w = words[i]
@@ -48,6 +51,7 @@ export class Model {
       for (let j = i * dim, end = j + dim; j < end; j++) s += q[j] * q[j]
       const n = Math.sqrt(s) * scales[i]
       this.invNorm[i] = n > 0 ? 1 / n : 0
+      this.sqNorm[i] = n * n
     }
   }
 
@@ -63,6 +67,15 @@ export class Model {
 
   id(word: string): number | undefined {
     return this.index.get(word.toLowerCase())
+  }
+
+  /** The stored (dequantized) row. */
+  vector(i: number): Float32Array {
+    const out = new Float32Array(this.dim)
+    const f = this.scales[i]
+    const o = i * this.dim
+    for (let j = 0; j < this.dim; j++) out[j] = this.q[o + j] * f
+    return out
   }
 
   unit(i: number): Float32Array {

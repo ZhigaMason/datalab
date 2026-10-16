@@ -53,6 +53,11 @@ describe('evaluate', () => {
     expect(Array.from(r.vector)).toEqual([1, -2])
   })
 
+  test('raw mode sums the stored vectors without normalizing', () => {
+    expect(Array.from(evaluate(m, 'a + b', true).vector)).toEqual([1, 2]) // raw b = (0, 2)
+    expect(Array.from(evaluate(m, 'a + b').vector)).toEqual([1, 1])
+  })
+
   test('names unknown words', () => {
     expect(() => evaluate(m, 'a + zzz')).toThrow('unknown word “zzz”')
   })
@@ -68,12 +73,19 @@ describe('isZero', () => {
 
   test('treats exact and rounding-level cancellation as zero', () => {
     expect(isZero(evaluate(m, 'a - a'))).toBe(true)
-    expect(isZero({ terms, vector: Float32Array.of(3e-8, -1e-8) })).toBe(true)
+    expect(isZero({ terms, vector: Float32Array.of(3e-8, -1e-8), scale: 2 })).toBe(true)
   })
 
   test('keeps genuine results', () => {
     expect(isZero(evaluate(m, 'a - b'))).toBe(false)
-    expect(isZero({ terms, vector: Float32Array.of(0.01, 0) })).toBe(false)
+    expect(isZero({ terms, vector: Float32Array.of(0.01, 0), scale: 2 })).toBe(false)
+  })
+
+  test('scales the threshold with the raw term lengths', () => {
+    const big = makeModel(['<pad>', 'a'], [[0, 0], [100, 0]], 10) // raw a = (1000, 0)
+    expect(evaluate(big, 'a - a', true).scale).toBe(2000)
+    expect(isZero({ ...evaluate(big, 'a - a', true), vector: Float32Array.of(1e-3, 0) })).toBe(true)
+    expect(isZero({ ...evaluate(big, 'a - a'), vector: Float32Array.of(1e-3, 0) })).toBe(false)
   })
 })
 

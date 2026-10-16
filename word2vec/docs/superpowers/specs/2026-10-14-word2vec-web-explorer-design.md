@@ -72,7 +72,7 @@ consider a smaller dim on mobile data." The sign is informational and does not b
 the run changes within a language. Panels are disabled until a model is loaded.
 
 **Arithmetic editor.** A text input, `k` number input (default 10), "Go" (also on Enter).
-Unknown words are reported in an inline error message. The word `0` is the zero vector: it is accepted in expressions, as an axis end and in the projection word list (plotted at the origin). Output:
+Unknown words are reported in an inline error message. A metric select switches between cosine (default; terms normalized) and L2 (terms summed as stored vectors, neighbours ranked by ‖row − query‖₂ ascending, distance shown, PCA map on stored vectors). The word `0` is the zero vector: it is accepted in expressions, as an axis end and in the projection word list (plotted at the origin). Output:
 - Neighbour list: word + cosine (3 decimals). Input words are excluded. Clicking a neighbour
   appends `+ word` to the expression.
 - PCA map: points for each term word, the result (marked distinctly) and the k neighbours,

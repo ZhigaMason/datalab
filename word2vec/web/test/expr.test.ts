@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { axisVector, evaluate, ExprError, isZero, parse, splitWords } from '../src/expr'
+import { axisVector, evaluate, ExprError, isZero, parse, splitWords, ZERO_ID } from '../src/expr'
 import { makeModel } from './helpers'
 
 describe('parse', () => {
@@ -101,6 +101,40 @@ describe('axisVector', () => {
 
   test('names a bad end', () => {
     expect(() => axisVector(m, 'zzz', 'a')).toThrow('unknown word “zzz”')
+  })
+})
+
+describe('the zero vector 0', () => {
+  const m = makeModel(['<pad>', 'a', 'b'], [[0, 0], [10, 0], [0, 20]])
+
+  test('parses as a word, alone, in sums and with a weight', () => {
+    expect(parse('0')).toEqual([{ word: '0', coef: 1 }])
+    expect(parse('king - man + 0')).toEqual([
+      { word: 'king', coef: 1 },
+      { word: 'man', coef: -1 },
+      { word: '0', coef: 1 },
+    ])
+    expect(parse('2*0')).toEqual([{ word: '0', coef: 2 }])
+  })
+
+  test('leaves weights and other numbers alone', () => {
+    expect(parse('0.5*king')).toEqual([{ word: 'king', coef: 0.5 }])
+    expect(parse('0 king')).toEqual([{ word: 'king', coef: 0 }])
+    expect(() => parse('10')).toThrow(ExprError)
+    expect(() => parse('0.0')).toThrow(ExprError)
+  })
+
+  test('evaluates to nothing added', () => {
+    const z = evaluate(m, '0')
+    expect(z.terms).toEqual([{ word: '0', coef: 1, id: ZERO_ID }])
+    expect(Array.from(z.vector)).toEqual([0, 0])
+    expect(isZero(z)).toBe(true)
+    expect(Array.from(evaluate(m, 'a + 0').vector)).toEqual([1, 0])
+  })
+
+  test('works as an axis end', () => {
+    expect(Array.from(axisVector(m, '0', 'b'))).toEqual([0, 1])
+    expect(() => axisVector(m, '0', '0')).toThrow(/zero vector/)
   })
 })
 

@@ -12,8 +12,11 @@ export interface Resolved {
 
 export class ExprError extends Error {}
 
-// [sign] [number [*]] word — a word cannot start with a digit, '.', '-', '+' or '*'
-const TERM = /\s*([+-])?\s*(?:(\d+(?:\.\d+)?|\.\d+)\s*\*?\s*)?([^\s+*\d.\-][^\s+*]*)\s*/y
+/** The word `0` stands for the zero vector; its terms carry this id instead of a vocab row. */
+export const ZERO_ID = -1
+
+// [sign] [number [*]] word — a word cannot start with a digit, '.', '-', '+' or '*', except a standalone 0
+const TERM = /\s*([+-])?\s*(?:(\d+(?:\.\d+)?|\.\d+)\s*\*?\s*)?([^\s+*\d.\-][^\s+*]*|(?<![\d.])0(?![\d.]))\s*/y
 
 export function parse(src: string): Term[] {
   src = src.replace(/[−–—]/g, '-') // the page itself shows U+2212 in hints and labels
@@ -33,6 +36,7 @@ export function parse(src: string): Term[] {
 
 export function evaluate(model: Model, src: string): Resolved {
   const terms = parse(src).map((t) => {
+    if (t.word === '0') return { ...t, id: ZERO_ID }
     const id = model.id(t.word)
     if (id === undefined) {
       const hint = t.word.includes('-') ? ' (put spaces around - to subtract)' : ''
@@ -42,6 +46,7 @@ export function evaluate(model: Model, src: string): Resolved {
   })
   const vector = new Float32Array(model.dim)
   for (const t of terms) {
+    if (t.id === ZERO_ID) continue
     const u = model.unit(t.id)
     for (let j = 0; j < model.dim; j++) vector[j] += t.coef * u[j]
   }
@@ -50,7 +55,7 @@ export function evaluate(model: Model, src: string): Resolved {
 
 /** True when the terms cancel out (up to float32 rounding), so the result has no meaningful direction. */
 export function isZero(r: Resolved): boolean {
-  const scale = r.terms.reduce((s, t) => s + Math.abs(t.coef), 0)
+  const scale = r.terms.reduce((s, t) => s + (t.id === ZERO_ID ? 0 : Math.abs(t.coef)), 0)
   let n = 0
   for (const x of r.vector) n += x * x
   return Math.sqrt(n) <= 1e-4 * scale

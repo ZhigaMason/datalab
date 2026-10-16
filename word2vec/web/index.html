@@ -51,7 +51,7 @@
       </div>
       <p class="hint">
         Use + and − with spaces and optional weights: <code>king - man + woman</code>,
-        <code>0.5*paris + berlin</code>. Click a neighbour to add it.
+        <code>0.5*paris + berlin</code>; <code>0</code> is the zero vector. Click a neighbour to add it.
       </p>
       <p id="expr-error" class="error" role="alert"></p>
       <div class="split">
@@ -84,7 +84,7 @@
       </div>
       <div class="row">
         <label><input id="ortho" type="checkbox" checked /> make y ⊥ x</label>
-        <span class="hint">Each end is a word or an expression; the axis points from the first box to the second. One end may be left empty.</span>
+        <span class="hint">Each end is a word or an expression; the axis points from the first box to the second; <code>0</code> is the origin. One end may be left empty. Put <code>0</code> in the word list to mark the origin.</span>
       </div>
       <div class="row">
         <textarea id="words" rows="2" spellcheck="false" aria-label="Words to plot"></textarea>

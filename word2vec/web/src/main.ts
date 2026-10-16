@@ -1,4 +1,4 @@
-import { axisVector, evaluate, ExprError, isZero, splitWords, type Resolved } from './expr'
+import { axisVector, evaluate, ExprError, isZero, splitWords, ZERO_ID, type Resolved } from './expr'
 import { normalize, pca2, projectAxes } from './geom'
 import { knn } from './knn'
 import { estimateMB, LARGE_MB, loadModel, runName, type Lang, type Model, type RunSpec } from './model'
@@ -16,6 +16,9 @@ const DEFAULTS: Record<Lang, { expr: string; x: [string, string]; y: [string, st
 }
 
 let model: Model | null = null
+
+/** Unit vector of a vocab row, or the zero vector for the word `0`. */
+const termVec = (m: Model, id: number) => (id === ZERO_ID ? new Float32Array(m.dim) : m.unit(id))
 let modelLang: Lang | null = null
 
 function currentSpec(): RunSpec {
@@ -149,12 +152,12 @@ function runEditor(): void {
   for (const t of res.terms) {
     if (seen.has(t.id)) continue
     seen.add(t.id)
-    add(m.unit(t.id), { label: t.word, kind: 'term' })
+    add(termVec(m, t.id), { label: t.word, kind: 'term' })
   }
   const chain = [0] // first term → each partial sum → result
   const acc = new Float32Array(m.dim)
   res.terms.forEach((t, i) => {
-    const u = m.unit(t.id)
+    const u = termVec(m, t.id)
     for (let j = 0; j < m.dim; j++) acc[j] += t.coef * u[j]
     if (i > 0 && i < res.terms.length - 1) chain.push(add(normalize(acc), { label: formatPrefix(res.terms, i + 1), kind: 'path' }))
   })
@@ -186,13 +189,13 @@ function runProjection(): void {
   const known: { word: string; id: number }[] = []
   const unknown: string[] = []
   for (const w of splitWords(value('words'))) {
-    const id = m.id(w)
+    const id = w === '0' ? ZERO_ID : m.id(w)
     if (id === undefined) unknown.push(w)
     else known.push({ word: w, id })
   }
   let xy: [number, number][]
   try {
-    xy = projectAxes(known.map((k) => m.unit(k.id)), axis(m, 'xaxis', 'x axis'), axis(m, 'yaxis', 'y axis'), ortho)
+    xy = projectAxes(known.map((k) => termVec(m, k.id)), axis(m, 'xaxis', 'x axis'), axis(m, 'yaxis', 'y axis'), ortho)
   } catch (e) {
     err.textContent = (e as Error).message
     renderPlot(svg, [])
